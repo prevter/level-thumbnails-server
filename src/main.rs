@@ -37,6 +37,7 @@ async fn main() {
 
     // setup directories
     tokio::fs::create_dir_all("thumbnails").await.unwrap();
+    tokio::fs::create_dir_all("thumbnails/cache").await.unwrap();
     tokio::fs::create_dir_all("uploads").await.unwrap();
 
     let cors = cors::CorsLayer::new()

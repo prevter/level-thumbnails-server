@@ -1,4 +1,5 @@
 use crate::{cache_controller, database, util};
+use crate::routes::thumbnail;
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{Path, Query, State};
@@ -61,6 +62,7 @@ async fn force_save(
         .map_err(|e| format!("Failed to add upload entry: {}", e))?;
 
     cache_controller::purge(id as i64);
+    thumbnail::purge_resize_cache(id as i64).await;
     Ok(())
 }
 
@@ -407,6 +409,7 @@ pub async fn pending_action(
         }
 
         cache_controller::purge(upload.level_id);
+        thumbnail::purge_resize_cache(upload.level_id).await;
         util::str_response(StatusCode::OK, &format!("Upload {} accepted", id))
     } else {
         // Reject: delete the pending image

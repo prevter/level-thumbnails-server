@@ -5,7 +5,10 @@ use axum::response::Response;
 use image::ImageReader;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use tracing::warn;
 use webp::Encoder;
+
+const CACHE_DIR: &str = "thumbnails/cache";
 
 #[derive(Deserialize, Serialize, Debug, Clone, Copy)]
 pub enum Res {
@@ -33,6 +36,21 @@ impl std::fmt::Display for Res {
             Res::High => write!(f, "high"),
             Res::Medium => write!(f, "medium"),
             Res::Small => write!(f, "small"),
+        }
+    }
+}
+
+fn cache_path(id: u64, res: Res) -> PathBuf {
+    PathBuf::from(format!("{}/{}_{}.webp", CACHE_DIR, id, res))
+}
+
+pub async fn purge_resize_cache(id: i64) {
+    for res in [Res::Small, Res::Medium] {
+        let path = cache_path(id as u64, res);
+        if let Err(e) = tokio::fs::remove_file(&path).await {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                warn!("Failed to remove resize cache {:?}: {}", path, e);
+            }
         }
     }
 }
@@ -122,11 +140,20 @@ async fn handle_image(id: u64, res: Res, db: database::AppState) -> Response {
         }
 
         Res::Medium | Res::Small => {
+            let cache_file = cache_path(id, res);
+            if let Ok(true) = tokio::fs::try_exists(&cache_file).await {
+                if let Ok(cached_data) = tokio::fs::read(&cache_file).await {
+                    return image_response(cached_data, id, &upload_info);
+                }
+            }
+
             // For lower resolutions, resize the image
             let resized_data = match resize_image(image_path, res).await {
                 Ok(data) => data,
                 Err(response) => return response,
             };
+
+            let _ = tokio::fs::write(&cache_file, &resized_data).await;
 
             image_response(resized_data, id, &upload_info)
         }
