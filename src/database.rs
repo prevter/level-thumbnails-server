@@ -6,6 +6,16 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+fn serialize_discord_snowflake<S>(value: &Option<i64>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match value {
+        Some(id) => serializer.serialize_some(&id.to_string()),
+        None => serializer.serialize_none(),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub pause_submissions: bool,
@@ -44,6 +54,7 @@ pub struct User {
     pub account_id: i64,
     pub username: String,
     pub role: Role,
+    #[serde(serialize_with = "serialize_discord_snowflake")]
     pub discord_id: Option<i64>,
 }
 

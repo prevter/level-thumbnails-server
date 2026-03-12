@@ -1,6 +1,8 @@
 use axum::response::Response;
 use axum::{Router, routing::get, routing::post};
 use std::path::Path;
+use axum::http::StatusCode;
+use tokio::net::TcpListener;
 use tower_http::cors;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::info;
@@ -87,7 +89,7 @@ async fn main() {
         .fallback_service(ServeDir::new("dist").fallback(ServeFile::new("dist/index.html")));
 
     let bind_address = dotenv::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:3000".to_string());
-    let listener = tokio::net::TcpListener::bind(bind_address).await.unwrap();
+    let listener = TcpListener::bind(bind_address).await.unwrap();
 
     info!("Started server!");
     axum::serve(listener, app).await.unwrap();
@@ -116,7 +118,7 @@ async fn get_stats() -> Response {
     let users_per_month = 3292188; // TODO: Fetch this from Cloudflare API
 
     util::response(
-        axum::http::StatusCode::OK,
+        StatusCode::OK,
         serde_json::json!({
             "storage": storage_size,
             "thumbnails": thumbnails_count,
