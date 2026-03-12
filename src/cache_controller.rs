@@ -1,10 +1,15 @@
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 use tracing::{error, info, warn};
+
+const CACHE_TTL: Duration = Duration::from_secs(3600);
 
 struct CloudflareClient {
     api_token: String,
     zone_id: String,
     root_url: String,
     client: reqwest::Client,
+    user_stats_cache: RwLock<Option<(u64, Instant)>>,
 }
 
 #[derive(Debug)]
@@ -32,7 +37,7 @@ impl CloudflareClient {
 
         let client = reqwest::ClientBuilder::new()
             .user_agent(format!("level-thumbnails-server/{}", env!("CARGO_PKG_VERSION")))
-            .timeout(std::time::Duration::from_secs(10))
+            .timeout(Duration::from_secs(10))
             .build()
             .expect("Failed to create HTTP client");
 
@@ -41,6 +46,20 @@ impl CloudflareClient {
             zone_id,
             root_url,
             client,
+            user_stats_cache: RwLock::new(None),
+        }
+    }
+
+    fn cached_user_stats_result(cached_value: Option<u64>, message: String) -> Result<u64, String> {
+        match cached_value {
+            Some(value) => {
+                warn!(
+                    "Failed to refresh Cloudflare user stats, using stale cached value: {}",
+                    message
+                );
+                Ok(value)
+            }
+            None => Err(message),
         }
     }
 
@@ -80,7 +99,105 @@ impl CloudflareClient {
     }
 
     pub async fn get_user_stats(&self) -> Result<u64, String> {
-        Ok(0)
+        let stale_cached_value = {
+            let cache = self.user_stats_cache.read().await;
+            match *cache {
+                Some((value, timestamp)) => {
+                    if timestamp.elapsed() < CACHE_TTL {
+                        return Ok(value);
+                    }
+
+                    Some(value)
+                }
+                None => None,
+            }
+        };
+
+        let since =
+            (chrono::Utc::now() - chrono::Duration::days(30)).format("%Y-%m-%d").to_string();
+        let until = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+        let query = "query ($zoneTag: String!, $since: Date!, $until: Date!) { \
+            viewer { \
+                zones(filter: { zoneTag: $zoneTag }) { \
+                    httpRequests1dGroups( \
+                        limit: 31, \
+                        filter: { \
+                            date_geq: $since, \
+                            date_lt: $until \
+                        } \
+                    ) { \
+                        uniq { uniques } \
+                    } \
+                } \
+            } \
+        }";
+
+        let payload = serde_json::json!({
+            "query": query,
+            "variables": {
+                "zoneTag": self.zone_id,
+                "since": since,
+                "until": until,
+            }
+        });
+
+        let response = self
+            .client
+            .post("https://api.cloudflare.com/client/v4/graphql")
+            .bearer_auth(&self.api_token)
+            .json(&payload)
+            .send()
+            .await;
+
+        let response = match response {
+            Ok(response) => response,
+            Err(e) => return Self::cached_user_stats_result(stale_cached_value, e.to_string()),
+        };
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Self::cached_user_stats_result(
+                stale_cached_value,
+                format!("Cloudflare API error {}: {}", status, text),
+            );
+        }
+
+        let data: serde_json::Value = match response.json().await {
+            Ok(data) => data,
+            Err(e) => return Self::cached_user_stats_result(stale_cached_value, e.to_string()),
+        };
+
+        if let Some(errors) = data["errors"].as_array() {
+            if !errors.is_empty() {
+                let message = errors
+                    .iter()
+                    .filter_map(|error| error["message"].as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ");
+
+                return Self::cached_user_stats_result(
+                    stale_cached_value,
+                    format!("Cloudflare GraphQL error: {}", message),
+                );
+            }
+        }
+
+        let groups = data["data"]["viewer"]["zones"][0]["httpRequests1dGroups"]
+            .as_array()
+            .ok_or_else(|| format!("Unexpected response structure: {}", data));
+
+        let groups = match groups {
+            Ok(groups) => groups,
+            Err(message) => return Self::cached_user_stats_result(stale_cached_value, message),
+        };
+
+        let total: u64 = groups.iter().filter_map(|group| group["uniq"]["uniques"].as_u64()).sum();
+
+        *self.user_stats_cache.write().await = Some((total, Instant::now()));
+
+        Ok(total)
     }
 }
 
@@ -108,7 +225,7 @@ pub fn purge(level_id: i64) {
                             "Purge failed for id {}: {}. Retrying in {} seconds (attempt {}/{})",
                             level_id, e.body, delay, attempt, max_retries
                         );
-                        tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+                        tokio::time::sleep(Duration::from_secs(delay)).await;
                     } else {
                         error!("Purge failed for id {}: {}", level_id, e.body);
                         break;
@@ -117,4 +234,16 @@ pub fn purge(level_id: i64) {
             }
         }
     });
+}
+
+pub async fn get_user_stats() -> Result<u64, String> {
+    if dotenv::var("CLOUDFLARE_API_KEY").is_err() {
+        return Err("CLOUDFLARE_API_KEY is not set".to_string());
+    }
+
+    if dotenv::var("CLOUDFLARE_ZONE_ID").is_err() {
+        return Err("CLOUDFLARE_ZONE_ID is not set".to_string());
+    }
+
+    CloudflareClient::get().get_user_stats().await
 }

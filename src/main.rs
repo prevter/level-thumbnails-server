@@ -1,11 +1,11 @@
+use axum::http::StatusCode;
 use axum::response::Response;
 use axum::{Router, routing::get, routing::post};
 use std::path::Path;
-use axum::http::StatusCode;
 use tokio::net::TcpListener;
 use tower_http::cors;
 use tower_http::services::{ServeDir, ServeFile};
-use tracing::info;
+use tracing::{info, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::filter::EnvFilter;
 
@@ -115,7 +115,10 @@ async fn get_stats() -> Response {
         Err(_) => (0, 0),
     };
 
-    let users_per_month = 3292188; // TODO: Fetch this from Cloudflare API
+    let users_per_month = cache_controller::get_user_stats().await.unwrap_or_else(|e| {
+        warn!("Failed to fetch user stats from Cloudflare: {}", e);
+        0
+    });
 
     util::response(
         StatusCode::OK,
