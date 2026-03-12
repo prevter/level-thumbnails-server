@@ -13,6 +13,8 @@ const IMAGE_WIDTH: u32 = 1920;
 const IMAGE_HEIGHT: u32 = 1080;
 const DEFAULT_PENDING_PAGE_SIZE: u32 = 24;
 const MAX_PENDING_PAGE_SIZE: u32 = 100;
+const MAX_SUBMISSION_NOTE_LENGTH: usize = 500;
+const SUBMISSION_NOTE_HEADER: &str = "x-submission-note";
 
 #[derive(Debug, Deserialize, Default)]
 pub struct LockLevelPayload {
@@ -68,10 +70,35 @@ fn process_image(data: &[u8]) -> Result<Vec<u8>, String> {
     Ok(encoder.encode_lossless().to_owned())
 }
 
+fn parse_submission_note(headers: &HeaderMap) -> Result<Option<String>, Response> {
+    let Some(value) = headers.get(SUBMISSION_NOTE_HEADER) else {
+        return Ok(None);
+    };
+
+    let value = value.to_str().map_err(|_| {
+        util::str_response(StatusCode::BAD_REQUEST, "Submission note must be valid UTF-8")
+    })?;
+
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    if trimmed.chars().count() > MAX_SUBMISSION_NOTE_LENGTH {
+        return Err(util::str_response(
+            StatusCode::BAD_REQUEST,
+            &format!("Submission note is too long (max {} characters)", MAX_SUBMISSION_NOTE_LENGTH),
+        ));
+    }
+
+    Ok(Some(trimmed.to_string()))
+}
+
 // Handler for uploading images for admins/moderators (and verified for new thumbnails)
 async fn force_save(
     id: u64,
     image_data: &[u8],
+    submission_note: Option<&str>,
     user: &database::User,
     db: &database::AppState,
 ) -> Result<(), String> {
@@ -81,7 +108,7 @@ async fn force_save(
         .await
         .map_err(|e| format!("Failed to save image: {}", e))?;
 
-    db.add_upload(id as i64, user.id, &image_path, true)
+    db.add_upload(id as i64, user.id, &image_path, true, submission_note)
         .await
         .map_err(|e| format!("Failed to add upload entry: {}", e))?;
 
@@ -93,6 +120,7 @@ async fn force_save(
 async fn add_to_pending(
     id: u64,
     image_data: &[u8],
+    submission_note: Option<&str>,
     user: &database::User,
     db: &database::AppState,
 ) -> Response {
@@ -115,7 +143,7 @@ async fn add_to_pending(
         }
     }
 
-    match db.add_upload(id as i64, user.id, &image_path, false).await {
+    match db.add_upload(id as i64, user.id, &image_path, false, submission_note).await {
         Ok(_) => util::str_response(
             StatusCode::ACCEPTED,
             &format!("Image for level ID {} is now pending", id),
@@ -145,6 +173,11 @@ pub async fn upload(
 ) -> Response {
     let user = match util::auth_middleware(&headers, &db).await {
         Ok(user) => user,
+        Err(response) => return response,
+    };
+
+    let submission_note = match parse_submission_note(&headers) {
+        Ok(note) => note,
         Err(response) => return response,
     };
 
@@ -187,7 +220,7 @@ pub async fn upload(
     match user.role {
         // Admins and moderators can upload and replace images directly
         database::Role::Admin | database::Role::Moderator => {
-            match force_save(id, &webp_data, &user, &db).await {
+            match force_save(id, &webp_data, submission_note.as_deref(), &user, &db).await {
                 Ok(_) => util::str_response(
                     StatusCode::CREATED,
                     &format!("Image for level ID {} uploaded", id),
@@ -202,7 +235,7 @@ pub async fn upload(
         // Verified users can upload new images directly, but replacements need approval
         database::Role::Verified => {
             if !is_image_uploaded(id).await {
-                match force_save(id, &webp_data, &user, &db).await {
+                match force_save(id, &webp_data, submission_note.as_deref(), &user, &db).await {
                     Ok(_) => util::str_response(
                         StatusCode::CREATED,
                         &format!("Image for level ID {} uploaded", id),
@@ -214,12 +247,14 @@ pub async fn upload(
                 }
             } else {
                 // Image exists, add to pending for approval
-                add_to_pending(id, &webp_data, &user, &db).await
+                add_to_pending(id, &webp_data, submission_note.as_deref(), &user, &db).await
             }
         }
 
         // Regular users must go through approval process
-        database::Role::User => add_to_pending(id, &webp_data, &user, &db).await,
+        database::Role::User => {
+            add_to_pending(id, &webp_data, submission_note.as_deref(), &user, &db).await
+        }
     }
 }
 
