@@ -3,6 +3,7 @@ use axum::response::Response;
 use axum::{Router, routing::delete, routing::get, routing::post};
 use std::path::Path;
 use tokio::net::TcpListener;
+use tokio::time::{Duration, sleep};
 use tower_http::cors;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::{info, warn};
@@ -46,6 +47,11 @@ async fn main() {
         .allow_headers(cors::Any);
 
     let db = database::get_db().await;
+
+    let snapshot_db = db.clone();
+    tokio::spawn(async move {
+        stats_snapshot_loop(snapshot_db).await;
+    });
 
     let app = Router::new()
         .route("/stats", get(get_stats))
@@ -117,22 +123,57 @@ async fn get_dir_stats(path: &Path) -> Result<(u64, usize), std::io::Error> {
 }
 
 async fn get_stats() -> Response {
-    let (storage_size, thumbnails_count) = match get_dir_stats(Path::new("thumbnails")).await {
-        Ok((size, count)) => (size, count),
-        Err(_) => (0, 0),
-    };
+    match database::get_db().await.get_recent_stats_snapshots(1).await {
+        Ok(mut snapshots) => {
+            let mut storage : i64 = 0;
+            let mut thumbnails : i64 = 0;
+            let mut users_per_month : i64 = 0;
 
-    let users_per_month = cache_controller::get_user_stats().await.unwrap_or_else(|e| {
-        warn!("Failed to fetch user stats from Cloudflare: {}", e);
-        0
-    });
+            if let Some(snapshot) = snapshots.pop() {
+                storage = snapshot.storage_bytes;
+                thumbnails = snapshot.thumbnails_count;
+                users_per_month = snapshot.users_per_month.unwrap_or(0);
+            }
 
-    util::response(
-        StatusCode::OK,
-        serde_json::json!({
-            "storage": storage_size,
-            "thumbnails": thumbnails_count,
-            "users_per_month": users_per_month,
-        }),
-    )
+            util::response(StatusCode::OK, serde_json::json!({
+                "storage": storage,
+                "thumbnails": thumbnails,
+                "users_per_month": users_per_month,
+            }))
+        }
+        Err(e) => util::str_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("Failed to fetch stats snapshot: {}", e),
+        ),
+    }
+}
+
+async fn stats_snapshot_loop(db: database::AppState) {
+    let interval_minutes = dotenv::var("STATS_SNAPSHOT_INTERVAL_MINUTES")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(60);
+
+    let interval = Duration::from_secs(interval_minutes * 60);
+
+    loop {
+        if let Err(e) = create_stats_snapshot(&db).await {
+            warn!("Failed to create stats snapshot: {}", e);
+        }
+
+        sleep(interval).await;
+    }
+}
+
+async fn create_stats_snapshot(db: &database::AppState) -> Result<(), String> {
+    let (storage_size, thumbnails_count) = get_dir_stats(Path::new("thumbnails"))
+        .await
+        .map_err(|e| format!("Failed to collect thumbnail storage stats: {}", e))?;
+
+    let users_per_month = cache_controller::get_user_stats().await.ok().map(|value| value as i64);
+
+    db.create_stats_snapshot(storage_size as i64, thumbnails_count as i64, users_per_month)
+        .await
+        .map_err(|e| format!("Failed to write stats snapshot: {}", e))
 }

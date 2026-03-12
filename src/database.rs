@@ -129,6 +129,19 @@ pub struct UserStats {
     pub active_thumbnail_count: i64,
 }
 
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct StatsSnapshot {
+    pub id: i64,
+    pub captured_at: NaiveDateTime,
+    pub storage_bytes: i64,
+    pub thumbnails_count: i64,
+    pub users_per_month: Option<i64>,
+    pub users_total: i64,
+    pub uploads_total: i64,
+    pub pending_uploads_total: i64,
+    pub accepted_uploads_total: i64,
+}
+
 impl AppState {
     pub async fn new() -> Self {
         let connection_string = dotenv::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -600,6 +613,65 @@ impl AppState {
         let settings = self.settings.read().await;
         let settings_data = serde_json::to_string_pretty(&*settings)?;
         tokio::fs::write("state.json", settings_data).await
+    }
+
+    pub async fn create_stats_snapshot(
+        &self,
+        storage_bytes: i64,
+        thumbnails_count: i64,
+        users_per_month: Option<i64>,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            "INSERT INTO stats_snapshots (
+                storage_bytes,
+                thumbnails_count,
+                users_per_month,
+                users_total,
+                uploads_total,
+                pending_uploads_total,
+                accepted_uploads_total
+            )
+            VALUES (
+                $1,
+                $2,
+                $3,
+                (SELECT COUNT(*) FROM users),
+                (SELECT COUNT(*) FROM uploads),
+                (SELECT COUNT(*) FROM uploads WHERE accepted = FALSE AND accepted_time IS NULL),
+                (SELECT COUNT(*) FROM uploads WHERE accepted = TRUE)
+            )",
+        )
+        .bind(storage_bytes)
+        .bind(thumbnails_count)
+        .bind(users_per_month)
+        .execute(&*self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn get_recent_stats_snapshots(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<StatsSnapshot>, sqlx::Error> {
+        sqlx::query_as::<_, StatsSnapshot>(
+            "SELECT
+                id,
+                captured_at,
+                storage_bytes,
+                thumbnails_count,
+                users_per_month,
+                users_total,
+                uploads_total,
+                pending_uploads_total,
+                accepted_uploads_total
+             FROM stats_snapshots
+             ORDER BY captured_at DESC, id DESC
+             LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(&*self.pool)
+        .await
     }
 }
 
