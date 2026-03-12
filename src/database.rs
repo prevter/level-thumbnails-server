@@ -276,20 +276,36 @@ impl AppState {
         accepted: bool,
         submission_note: Option<&str>,
     ) -> Result<(), sqlx::Error> {
-        sqlx::query(if accepted {
-            "INSERT INTO uploads (level_id, user_id, image_path, accepted, accepted_time, accepted_by, submission_note)
-                     VALUES ($1, $2, $3, $4, NOW(), $2, $5)"
+        if accepted {
+            sqlx::query(
+                "INSERT INTO uploads (level_id, user_id, image_path, accepted, accepted_time, accepted_by, submission_note)
+                 VALUES ($1, $2, $3, TRUE, NOW(), $2, $4)",
+            )
+            .bind(level_id)
+            .bind(user_id)
+            .bind(image_path)
+            .bind(submission_note)
+            .execute(&*self.pool)
+            .await?;
         } else {
-            "INSERT INTO uploads (level_id, user_id, image_path, accepted, submission_note)
-                     VALUES ($1, $2, $3, $4, $5)"
-        })
-        .bind(level_id)
-        .bind(user_id)
-        .bind(image_path)
-        .bind(accepted)
-        .bind(submission_note)
-        .execute(&*self.pool)
-        .await?;
+            sqlx::query(
+                "INSERT INTO uploads (level_id, user_id, image_path, accepted, submission_note)
+                 VALUES ($1, $2, $3, FALSE, $4)
+                 ON CONFLICT (user_id, level_id)
+                 WHERE accepted = FALSE AND accepted_time IS NULL
+                 DO UPDATE SET
+                     image_path = EXCLUDED.image_path,
+                     submission_note = EXCLUDED.submission_note,
+                     upload_time = NOW()",
+            )
+            .bind(level_id)
+            .bind(user_id)
+            .bind(image_path)
+            .bind(submission_note)
+            .execute(&*self.pool)
+            .await?;
+        }
+
         Ok(())
     }
 

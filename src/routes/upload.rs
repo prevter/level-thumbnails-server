@@ -155,11 +155,6 @@ async fn add_to_pending(
     }
 }
 
-async fn has_pending_upload(user_id: i64, level_id: u64) -> bool {
-    let image_path = format!("uploads/{}_{}.webp", user_id, level_id);
-    tokio::fs::try_exists(&image_path).await.unwrap_or(false)
-}
-
 async fn is_image_uploaded(id: u64) -> bool {
     let image_path = format!("thumbnails/{}.webp", id);
     tokio::fs::try_exists(&image_path).await.unwrap_or(false)
@@ -197,16 +192,6 @@ pub async fn upload(
             return util::str_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 &format!("Failed to check level lock: {}", e),
-            );
-        }
-    }
-
-    // Check for existing pending uploads for regular and verified users
-    if matches!(user.role, database::Role::User | database::Role::Verified) {
-        if has_pending_upload(user.id, id).await {
-            return util::str_response(
-                StatusCode::CONFLICT,
-                &format!("You already have a pending thumbnail for level ID {}", id),
             );
         }
     }
