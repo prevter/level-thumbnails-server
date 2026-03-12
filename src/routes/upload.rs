@@ -1,5 +1,5 @@
-use crate::{cache_controller, database, util};
 use crate::routes::thumbnail;
+use crate::{cache_controller, database, util};
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{Path, Query, State};
@@ -14,6 +14,17 @@ const IMAGE_HEIGHT: u32 = 1080;
 const DEFAULT_PENDING_PAGE_SIZE: u32 = 24;
 const MAX_PENDING_PAGE_SIZE: u32 = 100;
 
+#[derive(Debug, Deserialize, Default)]
+pub struct LockLevelPayload {
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LevelLockResponse {
+    pub locked: bool,
+    pub lock: Option<database::LevelLock>,
+}
+
 // Helper function to authenticate moderator/admin
 async fn authenticate_moderator(
     headers: &HeaderMap,
@@ -26,6 +37,19 @@ async fn authenticate_moderator(
             StatusCode::FORBIDDEN,
             "Only moderators or admins can perform this action",
         ));
+    }
+
+    Ok(user)
+}
+
+async fn authenticate_admin(
+    headers: &HeaderMap,
+    db: &database::AppState,
+) -> Result<database::User, Response> {
+    let user = util::auth_middleware(headers, db).await?;
+
+    if user.role != database::Role::Admin {
+        return Err(util::str_response(StatusCode::FORBIDDEN, "Admin privileges required"));
     }
 
     Ok(user)
@@ -123,6 +147,26 @@ pub async fn upload(
         Ok(user) => user,
         Err(response) => return response,
     };
+
+    match db.get_level_lock(id as i64).await {
+        Ok(Some(lock)) => {
+            return util::response(
+                StatusCode::FORBIDDEN,
+                serde_json::json!({
+                    "status": 403,
+                    "message": "Thumbnail submissions are locked for this level",
+                    "reason": lock.reason
+                }),
+            );
+        }
+        Ok(None) => {}
+        Err(e) => {
+            return util::str_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("Failed to check level lock: {}", e),
+            );
+        }
+    }
 
     // Check for existing pending uploads for regular and verified users
     if matches!(user.role, database::Role::User | database::Role::Verified) {
@@ -475,4 +519,92 @@ pub async fn get_pending_image(
         .header(header::CONTENT_LENGTH, image_data.len())
         .body(image_data.into())
         .unwrap()
+}
+
+pub async fn get_level_lock(
+    headers: HeaderMap,
+    State(db): State<database::AppState>,
+    Path(id): Path<i64>,
+) -> Response {
+    if let Err(response) = authenticate_moderator(&headers, &db).await {
+        return response;
+    }
+
+    match db.get_level_lock(id).await {
+        Ok(lock) => util::response(
+            StatusCode::OK,
+            serde_json::to_value(LevelLockResponse { locked: lock.is_some(), lock }).unwrap(),
+        ),
+        Err(e) => util::str_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("Failed to fetch level lock: {}", e),
+        ),
+    }
+}
+
+pub async fn lock_level(
+    headers: HeaderMap,
+    State(db): State<database::AppState>,
+    Path(id): Path<i64>,
+    Json(payload): Json<LockLevelPayload>,
+) -> Response {
+    let user = match authenticate_admin(&headers, &db).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+
+    match db.lock_level(id, user.id, payload.reason.as_deref()).await {
+        Ok(_) => util::str_response(
+            StatusCode::OK,
+            &format!("Level {} is now locked for submissions", id),
+        ),
+        Err(e) => util::str_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("Failed to lock level {}: {}", id, e),
+        ),
+    }
+}
+
+pub async fn unlock_level(
+    headers: HeaderMap,
+    State(db): State<database::AppState>,
+    Path(id): Path<i64>,
+) -> Response {
+    if let Err(response) = authenticate_admin(&headers, &db).await {
+        return response;
+    }
+
+    match db.unlock_level(id).await {
+        Ok(true) => util::str_response(
+            StatusCode::OK,
+            &format!("Level {} is now unlocked for submissions", id),
+        ),
+        Ok(false) => util::str_response(StatusCode::NOT_FOUND, "Level lock not found"),
+        Err(e) => util::str_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("Failed to unlock level {}: {}", id, e),
+        ),
+    }
+}
+
+pub async fn get_all_level_locks(
+    headers: HeaderMap,
+    State(db): State<database::AppState>,
+) -> Response {
+    if let Err(response) = authenticate_admin(&headers, &db).await {
+        return response;
+    }
+
+    match db.get_all_level_locks().await {
+        Ok(locks) => util::response(
+            StatusCode::OK,
+            serde_json::json!({
+                "locks": locks,
+            }),
+        ),
+        Err(e) => util::str_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("Failed to fetch locked levels: {}", e),
+        ),
+    }
 }

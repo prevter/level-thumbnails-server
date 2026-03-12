@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 use axum::response::Response;
-use axum::{Router, routing::get, routing::post};
+use axum::{Router, routing::delete, routing::get, routing::post};
 use std::path::Path;
 use tokio::net::TcpListener;
 use tower_http::cors;
@@ -50,6 +50,10 @@ async fn main() {
     let app = Router::new()
         .route("/stats", get(get_stats))
         // /thumbnail
+        .route("/thumbnail/locks", get(upload::get_all_level_locks))
+        .route("/thumbnail/{id}/lock", get(upload::get_level_lock))
+        .route("/thumbnail/{id}/lock", post(upload::lock_level))
+        .route("/thumbnail/{id}/lock", delete(upload::unlock_level))
         .route("/thumbnail/{id}", get(thumbnail::image_handler_default))
         .route("/thumbnail/{id}/{res}", get(thumbnail::image_handler_with_res))
         .route("/thumbnail/{id}/info", get(thumbnail::thumbnail_info_handler))
@@ -103,8 +107,10 @@ async fn get_dir_stats(path: &Path) -> Result<(u64, usize), std::io::Error> {
 
     while let Some(entry) = entries.next_entry().await? {
         let metadata = entry.metadata().await?;
-        file_count += 1;
-        total_size += metadata.len();
+        if metadata.is_file() {
+            file_count += 1;
+            total_size += metadata.len();
+        }
     }
 
     Ok((total_size, file_count))

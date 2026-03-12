@@ -77,6 +77,15 @@ pub struct UploadExtended {
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct LevelLock {
+    pub level_id: i64,
+    pub locked_by: i64,
+    pub locked_by_username: String,
+    pub locked_at: NaiveDateTime,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct PendingUpload {
     pub id: i64,
     pub user_id: i64,
@@ -279,6 +288,83 @@ impl AppState {
         .execute(&*self.pool)
         .await?;
         Ok(())
+    }
+
+    pub async fn is_level_locked(&self, level_id: i64) -> Result<bool, sqlx::Error> {
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM level_locks WHERE level_id = $1)",
+        )
+        .bind(level_id)
+        .fetch_one(&*self.pool)
+        .await?;
+
+        Ok(exists)
+    }
+
+    pub async fn get_level_lock(&self, level_id: i64) -> Result<Option<LevelLock>, sqlx::Error> {
+        sqlx::query_as::<_, LevelLock>(
+            "SELECT
+                level_locks.level_id,
+                level_locks.locked_by,
+                users.username AS locked_by_username,
+                level_locks.locked_at,
+                level_locks.reason
+             FROM level_locks
+             JOIN users ON users.id = level_locks.locked_by
+             WHERE level_locks.level_id = $1",
+        )
+        .bind(level_id)
+        .fetch_optional(&*self.pool)
+        .await
+    }
+
+    pub async fn get_all_level_locks(&self) -> Result<Vec<LevelLock>, sqlx::Error> {
+        sqlx::query_as::<_, LevelLock>(
+            "SELECT
+                level_locks.level_id,
+                level_locks.locked_by,
+                users.username AS locked_by_username,
+                level_locks.locked_at,
+                level_locks.reason
+             FROM level_locks
+             JOIN users ON users.id = level_locks.locked_by
+             ORDER BY level_locks.locked_at DESC, level_locks.level_id DESC",
+        )
+        .fetch_all(&*self.pool)
+        .await
+    }
+
+    pub async fn lock_level(
+        &self,
+        level_id: i64,
+        locked_by: i64,
+        reason: Option<&str>,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            "INSERT INTO level_locks (level_id, locked_by, reason)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (level_id)
+             DO UPDATE SET
+                 locked_by = EXCLUDED.locked_by,
+                 reason = EXCLUDED.reason,
+                 locked_at = NOW()",
+        )
+        .bind(level_id)
+        .bind(locked_by)
+        .bind(reason)
+        .execute(&*self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn unlock_level(&self, level_id: i64) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query("DELETE FROM level_locks WHERE level_id = $1")
+            .bind(level_id)
+            .execute(&*self.pool)
+            .await?;
+
+        Ok(result.rows_affected() > 0)
     }
 
     // pub async fn get_pending_uploads(&self) -> Result<Vec<PendingUpload>, sqlx::Error> {
