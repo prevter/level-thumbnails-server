@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     image: postgres:16-alpine
@@ -38,6 +36,15 @@ services:
       - type: bind
         source: ./migrations
         target: /app/migrations
+      - type: bind
+        source: ./thumbnails
+        target: /app/thumbnails
+      - type: bind
+        source: ./uploads
+        target: /app/uploads
+      - type: bind
+        source: ./logs
+        target: /app/logs
     ports:
       - "3000:3000"
     restart: unless-stopped
