@@ -179,9 +179,9 @@ pub async fn upload(
     match db.get_level_lock(id as i64).await {
         Ok(Some(lock)) => {
             return util::response(
-                StatusCode::FORBIDDEN,
+                StatusCode::LOCKED,
                 serde_json::json!({
-                    "status": 403,
+                    "status": 423,
                     "message": "Thumbnail submissions are locked for this level",
                     "reason": lock.reason
                 }),
