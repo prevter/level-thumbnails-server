@@ -1,3 +1,4 @@
+use axum::extract::DefaultBodyLimit;
 use axum::http::StatusCode;
 use axum::response::Response;
 use axum::{Router, routing::delete, routing::get, routing::post};
@@ -97,6 +98,7 @@ async fn main() {
         // .route("/admin/thumbnail/:id", delete(routes::admin::delete_thumbnail))
         .with_state(db)
         .layer(cors)
+        .layer(DefaultBodyLimit::disable())
         .fallback_service(ServeDir::new("dist").fallback(ServeFile::new("dist/index.html")));
 
     let bind_address = dotenv::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:3000".to_string());
