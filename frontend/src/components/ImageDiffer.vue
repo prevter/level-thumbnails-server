@@ -324,7 +324,6 @@ const imageTransform = computed(() => {
   cursor: grab;
   user-select: none;
   -webkit-user-drag: none;
-  image-rendering: pixelated;
 }
 
 .zoom-image-container img.dragging {

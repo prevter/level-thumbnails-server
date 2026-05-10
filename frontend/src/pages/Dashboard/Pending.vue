@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {ref, onMounted, watch, computed} from "vue";
+import {ref, onMounted, watch, computed, onBeforeUnmount} from "vue";
 import LoadingCircle from "../../components/LoadingCircle.vue";
 import ImageDiffer from "../../components/ImageDiffer.vue";
 
@@ -122,6 +122,32 @@ onMounted(() => {
   fetchPendingItems();
 });
 
+function handlePopState(ev: PopStateEvent) {
+  const state = ev.state as any;
+
+  if (state && typeof state.pendingItemId === 'number') {
+    const found = pendingItems.value.find(i => i.id === state.pendingItemId) || null;
+
+    if (found) {
+      selectedItem.value = found;
+    } else {
+      fetchPendingItems().then(() => {
+        selectedItem.value = pendingItems.value.find(i => i.id === state.pendingItemId) || null;
+      });
+    }
+  } else {
+    selectedItem.value = null;
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('popstate', handlePopState);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('popstate', handlePopState);
+});
+
 async function thumbnailAction(id: number, accept: boolean) {
   if (!selectedItem.value || fullscreenLoading.value) return;
   if (!accept) {
@@ -149,7 +175,7 @@ async function thumbnailAction(id: number, accept: boolean) {
     }
 
     await fetchPendingItems();
-    selectedItem.value = null;
+    closeItem();
   } catch (err) {
     alert("An error occurred while processing the thumbnail action: " + (err instanceof Error ? err.message : 'Unknown error'));
   } finally {
@@ -162,6 +188,24 @@ function goToPage(page: number) {
     currentPage.value = page;
   }
 }
+function openItem(item: PendingItem) {
+  try {
+    history.pushState({pendingItemId: item.id}, "", window.location.href);
+  } catch (e) {
+    // ignore
+  }
+
+  selectedItem.value = item;
+}
+
+function closeItem() {
+  try {
+    history.back();
+  } catch (e) {
+    selectedItem.value = null;
+  }
+}
+
 </script>
 
 <template>
@@ -174,7 +218,7 @@ function goToPage(page: number) {
   </div>
   <div v-else>
     <div v-if="selectedItem" class="selected-item page-transition">
-      <button @click="selectedItem = null" class="btn btn-secondary">Back to Thumbnails</button>
+      <button @click="closeItem()" class="btn btn-secondary">Back to Thumbnails</button>
 
       <h3 class="text-center">
         Level ID: {{ selectedItem!.level_id }}
@@ -299,7 +343,7 @@ function goToPage(page: number) {
         <p>No items match the current filters.</p>
       </div>
       <div v-else class="image-grid">
-        <div v-for="item in paginatedItems" :key="item.id" class="image-item" @click="selectedItem = item">
+        <div v-for="item in paginatedItems" :key="item.id" class="image-item" @click="openItem(item)">
           <img :src="`/pending/${item.id}/image`" alt="Thumbnail" class="thumbnail-image" loading="lazy"/>
           <div class="thumbnail-info">
             By {{ item.username }}<br/>
