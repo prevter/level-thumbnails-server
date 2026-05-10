@@ -171,6 +171,25 @@ pub async fn upload(
         Err(response) => return response,
     };
 
+    let ua = match util::parse_useragent(&headers) {
+        Some(ua) => {
+            if db.settings.read().await.min_supported_client.is_newer_than(&ua.version) {
+                return util::str_response(
+                    StatusCode::UPGRADE_REQUIRED,
+                    &format!(
+                        "Your Level Thumbnails version ({}) is outdated. Please update to the latest version to upload thumbnails.",
+                        ua.version
+                    )
+                );
+            }
+            ua
+        },
+        None => return util::str_response(
+            StatusCode::UPGRADE_REQUIRED,
+            "Your game version is not supported. Please update Geometry Dash and install the latest version of Level Thumbnails mod.",
+        ),
+    };
+
     let submission_note = match parse_submission_note(&headers) {
         Ok(note) => note,
         Err(response) => return response,

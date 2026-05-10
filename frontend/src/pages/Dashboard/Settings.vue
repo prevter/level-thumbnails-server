@@ -9,6 +9,7 @@ const linkingError = ref("");
 
 interface ServerSettings {
   pause_submissions: boolean;
+  min_supported_client: string
 }
 
 function downloadMyData() {
@@ -133,6 +134,12 @@ async function updateServerSettings() {
           {{ pendingSettings.pause_submissions ? "Submissions Paused" : "Submissions Active" }}
         </button>
       </div>
+      <div class="d-flex mt-1 setting-row">
+        <label for="minClient" class="setting-label">Minimum Mod Version:</label>
+        <input id="minClient" type="text"
+               v-model="pendingSettings.min_supported_client" class="setting-input link-token"
+               placeholder="e.g. v2.1.0" pattern="^v\d+\.\d+\.\d+(?:-(?:alpha|beta|prerelease|pr)(?:\.\d+)?)?$" />
+      </div>
       <div class="d-flex gap-1 mt-1">
         <button class="btn btn-primary flex-1" @click="updateServerSettings"
                 :disabled="JSON.stringify(settings) === JSON.stringify(pendingSettings)">
@@ -180,6 +187,39 @@ h3 {
 .note {
   color: #aaa;
   font-size: 0.9em;
+}
+
+.setting-row {
+  align-items: center;
+}
+
+.setting-label {
+  width: 180px;
+  min-width: 120px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+}
+
+.setting-input {
+  flex: 1;
+}
+
+.setting-input.link-token {
+  border-radius: 8px;
+}
+
+@media (max-width: 640px) {
+  .setting-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .setting-label {
+    width: auto;
+    min-width: 0;
+    margin-bottom: 8px;
+  }
 }
 
 .link-token {

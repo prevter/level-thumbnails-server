@@ -66,3 +66,165 @@ pub async fn auth_middleware(
         }
     }
 }
+
+pub enum ModPlatform {
+    Windows,
+    Android64,
+    Android32,
+    IntelMac,
+    ArmMac,
+    Ios,
+}
+
+#[derive(Debug, Clone)]
+pub enum VersionPrefix {
+    Release,
+    Alpha(Option<u32>),
+    Beta(Option<u32>),
+    Prerelease(Option<u32>),
+}
+
+#[derive(Debug, Clone)]
+pub struct VersionInfo {
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
+    pub prefix: VersionPrefix,
+}
+
+impl VersionInfo {
+    pub fn from_str(str: &str) -> Option<VersionInfo> {
+        let s = str.trim();
+
+        let s = s.strip_prefix('v')?;
+
+        let mut parts = s.splitn(2, '-');
+        let nums_part = parts.next().unwrap_or("");
+        let prerelease_part = parts.next();
+
+        let nums: Vec<&str> = nums_part.split('.').collect();
+        if nums.len() != 3 {
+            return None;
+        }
+
+        let major = nums[0].parse::<u32>().ok()?;
+        let minor = nums[1].parse::<u32>().ok()?;
+        let patch = nums[2].parse::<u32>().ok()?;
+
+        let prefix = if let Some(pr) = prerelease_part {
+            let pr_parts: Vec<&str> = pr.split('.').collect();
+            let ident = pr_parts.get(0).copied().unwrap_or("");
+            let opt_num = pr_parts.get(1).and_then(|n| n.parse::<u32>().ok());
+
+            if pr_parts.len() > 2 {
+                return None;
+            }
+
+            match ident {
+                "alpha" => VersionPrefix::Alpha(opt_num),
+                "beta" => VersionPrefix::Beta(opt_num),
+                "prerelease" | "pr" => VersionPrefix::Prerelease(opt_num),
+                _ => return None,
+            }
+        } else {
+            VersionPrefix::Release
+        };
+
+        Some(VersionInfo { major, minor, patch, prefix })
+    }
+
+    pub fn is_newer_than(&self, other: &VersionInfo) -> bool {
+        if self.major != other.major {
+            return self.major > other.major;
+        }
+        if self.minor != other.minor {
+            return self.minor > other.minor;
+        }
+        if self.patch != other.patch {
+            return self.patch > other.patch;
+        }
+
+        match (&self.prefix, &other.prefix) {
+            (VersionPrefix::Release, VersionPrefix::Release) => false,
+            (VersionPrefix::Release, _) => true,
+            (_, VersionPrefix::Release) => false,
+            (VersionPrefix::Alpha(n1), VersionPrefix::Alpha(n2))
+            | (VersionPrefix::Beta(n1), VersionPrefix::Beta(n2))
+            | (VersionPrefix::Prerelease(n1), VersionPrefix::Prerelease(n2)) => match (n1, n2) {
+                (Some(num1), Some(num2)) => num1 > num2,
+                (Some(_), None) => true,
+                (None, Some(_)) => false,
+                (None, None) => false,
+            },
+            (VersionPrefix::Alpha(_), _) => false,
+            (_, VersionPrefix::Alpha(_)) => true,
+            (VersionPrefix::Beta(_), _) => false,
+            (_, VersionPrefix::Beta(_)) => true,
+        }
+    }
+}
+
+impl std::fmt::Display for VersionInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let prefix_str = match &self.prefix {
+            VersionPrefix::Release => "".to_string(),
+            VersionPrefix::Alpha(opt) => {
+                format!("-alpha{}", opt.map_or("".to_string(), |n| format!(".{}", n)))
+            }
+            VersionPrefix::Beta(opt) => {
+                format!("-beta{}", opt.map_or("".to_string(), |n| format!(".{}", n)))
+            }
+            VersionPrefix::Prerelease(opt) => {
+                format!("-pr{}", opt.map_or("".to_string(), |n| format!(".{}", n)))
+            }
+        };
+        write!(f, "v{}.{}.{}{}", self.major, self.minor, self.patch, prefix_str)
+    }
+}
+
+impl serde::Serialize for VersionInfo {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for VersionInfo {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        VersionInfo::from_str(&s).ok_or_else(|| serde::de::Error::custom("Invalid version format"))
+    }
+}
+
+pub struct ModUserAgent {
+    pub platform: ModPlatform,
+    pub version: VersionInfo,
+}
+
+pub fn parse_useragent(headers: &HeaderMap) -> Option<ModUserAgent> {
+    headers.get(header::USER_AGENT).and_then(|ua| ua.to_str().ok()).and_then(|ua_str| {
+        let parts: Vec<&str> = ua_str.split('/').collect();
+        if parts.len() != 3 || parts[0] != "LevelThumbnails" {
+            return None;
+        }
+
+        let platform = match parts[1] {
+            "Windows" => ModPlatform::Windows,
+            "Android64" => ModPlatform::Android64,
+            "Android32" => ModPlatform::Android32,
+            "IntelMac" => ModPlatform::IntelMac,
+            "ArmMac" => ModPlatform::ArmMac,
+            "iOS" => ModPlatform::Ios,
+            _ => return None,
+        };
+
+        let version = VersionInfo::from_str(parts[2])?;
+
+        Some(ModUserAgent { platform, version })
+    })
+}

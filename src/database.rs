@@ -5,6 +5,7 @@ use std::path::Path;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use crate::util::VersionInfo;
 
 fn serialize_discord_snowflake<S>(value: &Option<i64>, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -16,9 +17,25 @@ where
     }
 }
 
+fn default_min_supported_client() -> VersionInfo {
+    VersionInfo::from_str("v2.1.0").expect("Invalid default version")
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Settings {
     pub pause_submissions: bool,
+    #[serde(default = "default_min_supported_client")]
+    pub min_supported_client: VersionInfo,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            pause_submissions: false,
+            min_supported_client: default_min_supported_client(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -156,9 +173,9 @@ impl AppState {
 
         // load settings from state.json or create default
         let settings = if let Ok(settings_data) = tokio::fs::read_to_string("state.json").await {
-            serde_json::from_str(&settings_data).unwrap_or(Settings { pause_submissions: false })
+            serde_json::from_str(&settings_data).unwrap_or_default()
         } else {
-            Settings { pause_submissions: false }
+            Settings::default()
         };
 
         AppState {

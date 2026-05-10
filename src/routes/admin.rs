@@ -4,7 +4,7 @@ use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Response;
 use serde::Deserialize;
-use std::ops::{Deref, DerefMut};
+use crate::util::VersionInfo;
 
 pub async fn admin_middleware(
     headers: &HeaderMap,
@@ -26,7 +26,7 @@ pub async fn get_settings(headers: HeaderMap, State(db): State<database::AppStat
     match admin_middleware(&headers, &db).await {
         Ok(_) => util::response(
             StatusCode::OK,
-            serde_json::to_value(db.settings.read().await.deref()).unwrap(),
+            serde_json::to_value(&*db.settings.read().await).unwrap(),
         ),
         Err(resp) => resp,
     }
@@ -35,6 +35,7 @@ pub async fn get_settings(headers: HeaderMap, State(db): State<database::AppStat
 #[derive(Deserialize, Debug)]
 pub struct UpdateSettingsPayload {
     pub pause_submissions: bool,
+    pub min_supported_client: String,
 }
 
 pub async fn update_settings(
@@ -44,7 +45,20 @@ pub async fn update_settings(
 ) -> Response {
     match admin_middleware(&headers, &db).await {
         Ok(_) => {
-            db.settings.write().await.deref_mut().pause_submissions = payload.pause_submissions;
+            {
+                let mut settings = db.settings.write().await;
+                settings.pause_submissions = payload.pause_submissions;
+                settings.min_supported_client = match VersionInfo::from_str(&payload.min_supported_client) {
+                    Some(version) => version,
+                    None => {
+                        return util::str_response(
+                            StatusCode::BAD_REQUEST,
+                            "Invalid version format for min_supported_client",
+                        );
+                    }
+                };
+            }
+
             match db.save_settings().await {
                 Ok(_) => util::str_response(StatusCode::OK, "Settings updated successfully"),
                 Err(e) => util::str_response(
