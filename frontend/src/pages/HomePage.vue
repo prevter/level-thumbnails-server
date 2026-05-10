@@ -2,6 +2,8 @@
 import {ref} from 'vue';
 import {useRouter} from 'vue-router'
 import SessionManager from "../managers/session.ts";
+import { fetchJson, unwrap } from "../lib/utils";
+import type { StatsResponse } from "../lib/types";
 
 import MosaicGrid from "../components/MosaicGrid.vue";
 import Button from "../components/Button.vue";
@@ -35,16 +37,20 @@ function convertStorageSize(size: number): number {
   return size;
 }
 
-fetch('/stats')
-    .then(response => response.json())
-    .then(data => {
-      let storageSize = data.storage;
-      stats.value.storage = convertStorageSize(storageSize);
-      stats.value.storage_size = determineStorageUnit(storageSize);
-      stats.value.thumbnails = data.thumbnails;
-      stats.value.users_per_month = data.users_per_month;
-    })
-    .catch(error => console.error('Error fetching stats:', error));
+(async () => {
+  try {
+    const payload = await fetchJson('/stats');
+    const data = unwrap<StatsResponse>(payload);
+
+    const storageSize = (data.storage ?? 0) as number;
+    stats.value.storage = convertStorageSize(storageSize);
+    stats.value.storage_size = determineStorageUnit(storageSize);
+    stats.value.thumbnails = (data.thumbnails ?? 0) as number;
+    stats.value.users_per_month = (data.users_per_month ?? 0) as number;
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+  }
+})();
 
 const router = useRouter();
 

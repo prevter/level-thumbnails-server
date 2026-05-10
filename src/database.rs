@@ -1,8 +1,9 @@
+use std::collections::HashMap;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{FromRow, Postgres, QueryBuilder};
 use std::path::Path;
 
-use chrono::NaiveDateTime;
+use chrono::{Datelike, NaiveDate, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use crate::util::VersionInfo;
@@ -141,6 +142,7 @@ pub struct UserStats {
     pub role: Role,
     pub upload_count: i64,
     pub accepted_upload_count: i64,
+    pub pending_upload_count: i64,
     pub level_count: i64,
     pub accepted_level_count: i64,
     pub active_thumbnail_count: i64,
@@ -157,6 +159,28 @@ pub struct StatsSnapshot {
     pub uploads_total: i64,
     pub pending_uploads_total: i64,
     pub accepted_uploads_total: i64,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct UserHistoryPoint {
+    pub period: NaiveDate,
+    pub upload_count: i64,
+    pub accepted_upload_count: i64,
+    pub pending_upload_count: i64,
+    pub level_count: i64,
+    pub accepted_level_count: i64,
+}
+
+fn month_start(date: NaiveDate) -> NaiveDate {
+    NaiveDate::from_ymd_opt(date.year(), date.month(), 1).expect("invalid month start")
+}
+
+fn add_months(date: NaiveDate, months: i32) -> NaiveDate {
+    let total_months = date.year() * 12 + date.month0() as i32 + months;
+    let year = total_months.div_euclid(12);
+    let month0 = total_months.rem_euclid(12);
+
+    NaiveDate::from_ymd_opt(year, (month0 + 1) as u32, 1).expect("invalid shifted month")
 }
 
 impl AppState {
@@ -580,6 +604,7 @@ impl AppState {
                  COUNT(uploads.id) AS upload_count,
                  COUNT(DISTINCT uploads.level_id) AS level_count,
                  COUNT(uploads.id) FILTER (WHERE uploads.accepted = TRUE) AS accepted_upload_count,
+                 COUNT(uploads.id) FILTER (WHERE uploads.accepted = FALSE AND uploads.accepted_time IS NULL) AS pending_upload_count,
                  COUNT(DISTINCT uploads.level_id) FILTER (WHERE uploads.accepted = TRUE) AS accepted_level_count,
                  (
                    SELECT COUNT(*)
@@ -605,6 +630,65 @@ impl AppState {
          .fetch_optional(&*self.pool)
          .await
          .ok()?
+    }
+
+    pub async fn get_user_history(
+        &self,
+        id: i64,
+        months: i64,
+    ) -> Result<Vec<UserHistoryPoint>, sqlx::Error> {
+        let months = months.clamp(1, 24) as i32;
+        let current_month = month_start(Utc::now().date_naive());
+        let start_month = add_months(current_month, -(months - 1));
+        let end_month = add_months(current_month, 1);
+
+        let rows = sqlx::query_as::<_, UserHistoryPoint>(
+            "SELECT
+                date_trunc('month', upload_time)::date AS period,
+                COUNT(*) AS upload_count,
+                COUNT(*) FILTER (WHERE accepted = TRUE) AS accepted_upload_count,
+                COUNT(*) FILTER (WHERE accepted = FALSE AND accepted_time IS NULL) AS pending_upload_count,
+                COUNT(DISTINCT level_id) AS level_count,
+                COUNT(DISTINCT level_id) FILTER (WHERE accepted = TRUE) AS accepted_level_count
+             FROM uploads
+             WHERE user_id = $1
+               AND upload_time >= $2
+               AND upload_time < $3
+             GROUP BY 1
+             ORDER BY 1 ASC",
+        )
+        .bind(id)
+        .bind(start_month.and_hms_opt(0, 0, 0).expect("invalid start month time"))
+        .bind(end_month.and_hms_opt(0, 0, 0).expect("invalid end month time"))
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let mut by_period = HashMap::with_capacity(rows.len());
+        for row in rows {
+            by_period.insert(row.period, row);
+        }
+
+        let mut history = Vec::with_capacity(months as usize);
+        let mut period = start_month;
+
+        for _ in 0..months {
+            if let Some(row) = by_period.remove(&period) {
+                history.push(row);
+            } else {
+                history.push(UserHistoryPoint {
+                    period,
+                    upload_count: 0,
+                    accepted_upload_count: 0,
+                    pending_upload_count: 0,
+                    level_count: 0,
+                    accepted_level_count: 0,
+                });
+            }
+
+            period = add_months(period, 1);
+        }
+
+        Ok(history)
     }
 
     pub async fn migrate_user_account(
@@ -688,6 +772,39 @@ impl AppState {
         )
         .bind(limit)
         .fetch_all(&*self.pool)
+        .await
+    }
+
+    pub async fn get_recent_stats_snapshots_ascending(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<StatsSnapshot>, sqlx::Error> {
+        sqlx::query_as::<_, StatsSnapshot>(
+            "SELECT id, captured_at, storage_bytes, thumbnails_count, users_per_month, users_total, uploads_total, pending_uploads_total, accepted_uploads_total
+             FROM (
+                 SELECT id, captured_at, storage_bytes, thumbnails_count, users_per_month, users_total, uploads_total, pending_uploads_total, accepted_uploads_total
+                 FROM stats_snapshots
+                 ORDER BY captured_at DESC, id DESC
+                 LIMIT $1
+             ) recent
+             ORDER BY captured_at ASC, id ASC",
+        )
+        .bind(limit)
+        .fetch_all(&*self.pool)
+        .await
+    }
+
+    pub async fn get_total_level_count(&self) -> Result<i64, sqlx::Error> {
+        sqlx::query_scalar("SELECT COUNT(DISTINCT level_id) FROM uploads")
+            .fetch_one(&*self.pool)
+            .await
+    }
+
+    pub async fn get_current_pending_upload_count(&self) -> Result<i64, sqlx::Error> {
+        sqlx::query_scalar(
+            "SELECT COUNT(*) FROM uploads WHERE accepted = FALSE AND accepted_time IS NULL",
+        )
+        .fetch_one(&*self.pool)
         .await
     }
 }

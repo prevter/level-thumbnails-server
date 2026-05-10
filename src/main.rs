@@ -1,6 +1,4 @@
 use axum::extract::DefaultBodyLimit;
-use axum::http::StatusCode;
-use axum::response::Response;
 use axum::{Router, routing::delete, routing::get, routing::post};
 use std::path::Path;
 use tokio::net::TcpListener;
@@ -17,7 +15,7 @@ mod database;
 mod routes;
 mod util;
 
-use routes::{admin, login, thumbnail, upload, user};
+use routes::{admin, login, stats, thumbnail, upload, user};
 
 #[tokio::main]
 async fn main() {
@@ -55,7 +53,8 @@ async fn main() {
     });
 
     let app = Router::new()
-        .route("/stats", get(get_stats))
+        .route("/stats", get(stats::get_stats))
+        .route("/stats/history", get(stats::get_stats_history))
         // /thumbnail
         .route("/thumbnail/locks", get(upload::get_all_level_locks))
         .route("/thumbnail/{id}/lock", get(upload::get_level_lock))
@@ -75,8 +74,10 @@ async fn main() {
         .route("/auth/logout", get(login::logout))
         // /user
         .route("/user/me", get(user::get_me))
+        .route("/user/me/history", get(user::get_me_history))
         // .route("/user/me", delete(user::delete_me))
         .route("/user/{id}", get(user::get_user_by_id))
+        .route("/user/{id}/history", get(user::get_user_history))
         // .route("/user/me/uploads", get(routes::user::get_my_uploads))
         // .route("/user/{id}/uploads", get(routes::user::get_user_uploads))
         // /upload
@@ -124,31 +125,6 @@ async fn get_dir_stats(path: &Path) -> Result<(u64, usize), std::io::Error> {
     Ok((total_size, file_count))
 }
 
-async fn get_stats() -> Response {
-    match database::get_db().await.get_recent_stats_snapshots(1).await {
-        Ok(mut snapshots) => {
-            let mut storage : i64 = 0;
-            let mut thumbnails : i64 = 0;
-            let mut users_per_month : i64 = 0;
-
-            if let Some(snapshot) = snapshots.pop() {
-                storage = snapshot.storage_bytes;
-                thumbnails = snapshot.thumbnails_count;
-                users_per_month = snapshot.users_per_month.unwrap_or(0);
-            }
-
-            util::response(StatusCode::OK, serde_json::json!({
-                "storage": storage,
-                "thumbnails": thumbnails,
-                "users_per_month": users_per_month,
-            }))
-        }
-        Err(e) => util::str_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            &format!("Failed to fetch stats snapshot: {}", e),
-        ),
-    }
-}
 
 async fn stats_snapshot_loop(db: database::AppState) {
     let interval_minutes = dotenv::var("STATS_SNAPSHOT_INTERVAL_MINUTES")

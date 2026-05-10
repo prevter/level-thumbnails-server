@@ -2,23 +2,8 @@
 import {ref, onMounted, watch, computed, onBeforeUnmount} from "vue";
 import LoadingCircle from "../../components/LoadingCircle.vue";
 import ImageDiffer from "../../components/ImageDiffer.vue";
-
-interface PendingItem {
-  id: number;
-  user_id: number;
-  username: string;
-  level_id: number;
-  accepted: boolean;
-  replacement: boolean;
-  upload_time: string;
-}
-
-interface PendingResponse {
-  uploads: PendingItem[];
-  page: number;
-  per_page: number;
-  total: number;
-}
+import type { PendingItem, PendingResponse } from "../../lib/types";
+import { fetchJson } from "../../lib/utils";
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -101,13 +86,7 @@ async function fetchPendingItems() {
       params.append('new_only', 'true');
     }
 
-    const response = await fetch(`/pending?${params.toString()}`);
-    const data: PendingResponse = await response.json();
-
-    // Check if the response is ok
-    if (!response.ok) {
-      throw new Error((data as any).message || 'Failed to fetch pending items');
-    }
+    const data = await fetchJson<PendingResponse>(`/pending?${params.toString()}`);
 
     pendingItems.value = data.uploads;
     totalItems.value = data.total;

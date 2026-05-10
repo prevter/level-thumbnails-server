@@ -1,16 +1,13 @@
 <script setup lang="ts">
 import {ref} from "vue";
 import SessionManager from "../../managers/session.ts";
+import type { ServerSettings } from "../../lib/types";
+import { fetchJson } from "../../lib/utils.ts";
 
 const user = ref(SessionManager.getUser()!);
 const token = ref("");
 const loadingToken = ref(false);
 const linkingError = ref("");
-
-interface ServerSettings {
-  pause_submissions: boolean;
-  min_supported_client: string
-}
 
 function downloadMyData() {
 
@@ -30,12 +27,7 @@ async function copyToken() {
   loadingToken.value = true;
 
   try {
-    const response = await fetch('/auth/link');
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || 'Unknown error occurred while linking account');
-    }
+    const data = await fetchJson<{ token: string }>('/auth/link');
 
     token.value = data.token;
     await navigator.clipboard.writeText(token.value);
@@ -65,9 +57,8 @@ function verifyAccount() {
 const settings = ref<ServerSettings | null>(null);
 const pendingSettings = ref<ServerSettings | null>(null);
 if (user.value.role === 'admin') {
-  fetch('/admin/settings')
-      .then(response => response.json())
-      .then((data: ServerSettings) => {
+  fetchJson<ServerSettings>('/admin/settings')
+      .then((data) => {
         settings.value = data;
         pendingSettings.value = {...data};
       })
@@ -79,22 +70,21 @@ if (user.value.role === 'admin') {
 async function updateServerSettings() {
   if (!pendingSettings.value) return;
 
-  const response = await fetch('/admin/settings', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(pendingSettings.value)
-  });
+  try {
+    await fetchJson('/admin/settings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(pendingSettings.value)
+    });
 
-  if (!response.ok) {
-    const data = await response.json();
-    alert(`Error updating server settings: ${data.message || 'Unknown error'}`);
-    return;
+    settings.value = {...pendingSettings.value};
+    alert("Server settings updated successfully.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    alert(`Error updating server settings: ${message}`);
   }
-
-  settings.value = {...pendingSettings.value};
-  alert("Server settings updated successfully.");
 }
 
 </script>
