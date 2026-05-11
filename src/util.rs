@@ -217,8 +217,8 @@ pub fn parse_useragent(headers: &HeaderMap) -> Option<ModUserAgent> {
             "Windows" => ModPlatform::Windows,
             "Android64" => ModPlatform::Android64,
             "Android32" => ModPlatform::Android32,
-            "IntelMac" => ModPlatform::IntelMac,
-            "ArmMac" => ModPlatform::ArmMac,
+            "MacIntel" => ModPlatform::IntelMac,
+            "MacArm" => ModPlatform::ArmMac,
             "iOS" => ModPlatform::Ios,
             _ => return None,
         };
