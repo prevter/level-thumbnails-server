@@ -24,6 +24,7 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 const currentPage = ref(1);
 const itemsPerPage = ref(12);
+const pageInput = ref<string>("");
 
 const filteredItems = computed(() => pendingItems.value);
 const totalPages = computed(() => {
@@ -167,6 +168,23 @@ function goToPage(page: number) {
     currentPage.value = page;
   }
 }
+
+function goToFirstPage() {
+  currentPage.value = 1;
+}
+
+function goToLastPage() {
+  currentPage.value = totalPages.value;
+}
+
+function handlePageInputChange() {
+  const page = parseInt(pageInput.value, 10);
+  if (!isNaN(page) && page >= 1 && page <= totalPages.value) {
+    currentPage.value = page;
+    pageInput.value = "";
+  }
+}
+
 function openItem(item: PendingItem) {
   try {
     history.pushState({pendingItemId: item.id}, "", window.location.href);
@@ -293,6 +311,15 @@ function closeItem() {
         <div v-if="totalPages > 1" class="pagination-container">
           <div class="pagination-controls">
             <button
+                @click="goToFirstPage()"
+                :disabled="currentPage === 1"
+                class="btn btn-secondary btn-sm"
+                title="First page"
+            >
+              ⏮
+            </button>
+
+            <button
                 @click="goToPage(currentPage - 1)"
                 :disabled="currentPage === 1"
                 class="btn btn-secondary btn-sm"
@@ -310,6 +337,32 @@ function closeItem() {
                 class="btn btn-secondary btn-sm"
             >
               ▸
+            </button>
+
+            <button
+                @click="goToLastPage()"
+                :disabled="currentPage === totalPages"
+                class="btn btn-secondary btn-sm"
+                title="Last page"
+            >
+              ⏭
+            </button>
+
+            <input
+                type="number"
+                v-model="pageInput"
+                @keyup.enter="handlePageInputChange()"
+                class="form-control pagination-input-field"
+                placeholder="Go to page..."
+                min="1"
+                :max="totalPages"
+            />
+            <button
+                @click="handlePageInputChange()"
+                :disabled="pageInput === ''"
+                class="btn btn-secondary btn-sm"
+            >
+              Go
             </button>
           </div>
         </div>
@@ -430,9 +483,10 @@ function closeItem() {
 
 .pagination-container {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 16px;
   align-items: center;
+  justify-content: center;
   margin-top: 16px;
   padding: 8px;
 }
@@ -443,6 +497,12 @@ function closeItem() {
   align-items: center;
   flex-wrap: wrap;
   justify-content: center;
+}
+
+.pagination-input-field {
+  width: 120px;
+  padding: 6px 12px;
+  max-height: 32px;
 }
 
 .page-info {
@@ -485,10 +545,15 @@ function closeItem() {
 
   .pagination-controls {
     font-size: 0.9em;
+    flex-wrap: wrap;
   }
 
   .page-info {
     margin: 0 8px;
+  }
+
+  .pagination-input-field {
+    width: 100px;
   }
 }
 </style>
