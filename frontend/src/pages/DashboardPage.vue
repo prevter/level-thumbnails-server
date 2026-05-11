@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import SessionManager from "../managers/session.ts";
 import LoadingCircle from "../components/LoadingCircle.vue";
-import {ref} from "vue";
+import {ref, watch} from "vue";
 import Settings from "./Dashboard/Settings.vue";
 import Pending from "./Dashboard/Pending.vue";
 import Thumbnails from "./Dashboard/Thumbnails.vue";
@@ -17,6 +17,11 @@ SessionManager.validateSession().then(() => {
 });
 
 const currentPage = ref(window.location.hash.replace('#', '') || '');
+const isSidebarCollapsed = ref(localStorage.getItem('sidebarCollapsed') === 'true');
+
+watch(isSidebarCollapsed, (value) => {
+  localStorage.setItem('sidebarCollapsed', value.toString());
+});
 
 function hasPendingPerms() {
   return user.value && (user.value.role === 'admin' || user.value.role === 'moderator');
@@ -34,14 +39,23 @@ const PAGES = [
 <template>
   <LoadingCircle backdrop v-if="!user"/>
   <main v-else>
-    <div class="sidebar appear">
+    <div class="sidebar appear" :class="{ collapsed: isSidebarCollapsed }">
       <div class="title">
         <h3>
           <img src="/logo.webp" alt="Logo" style="width: 32px; height: auto;"/>
-          Level Thumbnails
+          <span class="title-text">Level Thumbnails</span>
         </h3>
       </div>
       <div class="navbar slide-right">
+        <button
+            class="nav-link nav-toggle"
+            type="button"
+            :aria-label="isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+            @click="isSidebarCollapsed = !isSidebarCollapsed"
+        >
+          <span class="toggle-icon">{{ isSidebarCollapsed ? '»' : '«' }}</span>
+          <span>{{ isSidebarCollapsed ? 'Expand' : 'Collapse' }}</span>
+        </button>
         <a v-for="page in PAGES.filter(p => {
           if (p.requires) {
             return p.requires();
@@ -95,6 +109,8 @@ main {
   flex-direction: column;
   position: fixed;
   left: 0;
+  transition: width 0.25s ease;
+  overflow: visible;
 }
 
 .content {
@@ -103,17 +119,21 @@ main {
   margin: 20px 20px 20px 290px;
   background-color: rgba(0, 0, 0, 0.1);
   border-radius: 12px;
+  transition: margin-left 0.25s ease;
 }
 
 .title {
   width: fit-content;
   margin: 0 auto;
+  white-space: nowrap;
 }
 
 .sidebar h3 {
   display: flex;
   align-items: center;
   gap: 10px;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .navbar {
@@ -135,6 +155,8 @@ main {
   transition: background-color 0.3s ease;
   display: flex;
   align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .nav-link img {
@@ -213,6 +235,75 @@ main {
   margin-left: auto;
   display: flex;
   align-items: center;
+}
+
+@media (min-width: 769px) {
+  .nav-toggle {
+    border: none;
+    background-color: transparent;
+    cursor: pointer;
+    width: 100%;
+    font: inherit;
+  }
+
+  .toggle-icon {
+    width: 20px;
+    text-align: center;
+    margin-right: 8px;
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .sidebar.collapsed {
+    width: 48px;
+    padding: 20px 8px;
+  }
+
+  .sidebar.collapsed .title {
+    margin: 0 auto;
+  }
+
+  .sidebar.collapsed .title-text,
+  .sidebar.collapsed .warning-info,
+  .sidebar.collapsed .username,
+  .sidebar.collapsed .user-role,
+  .sidebar.collapsed .logout-link {
+    display: none;
+  }
+
+  .sidebar.collapsed .navbar {
+    margin-top: 12px;
+    padding: 8px 6px;
+  }
+
+  .sidebar.collapsed .nav-link {
+    justify-content: center;
+    padding: 10px;
+  }
+
+  .sidebar.collapsed .nav-link span {
+    display: none;
+  }
+
+  .sidebar.collapsed .nav-link .toggle-icon {
+    display: inline-block;
+    margin-right: 0;
+  }
+
+  .sidebar.collapsed .nav-link img {
+    margin-right: 0;
+  }
+
+  .sidebar.collapsed .user-info {
+    justify-content: center;
+    gap: 0;
+    margin-top: 12px;
+    padding: 8px;
+  }
+
+  .sidebar.collapsed + .content {
+    margin-left: 64px;
+  }
 }
 
 .appear {
