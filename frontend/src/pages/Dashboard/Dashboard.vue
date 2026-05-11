@@ -288,28 +288,40 @@ onMounted(loadDashboard);
 
           <div class="stats-grid">
             <div class="stat-tile">
-              <span class="stat-label">Uploads</span>
-              <strong>
-                <LazyCounter :value="user!.upload_count" />
-              </strong>
+              <img src="/icons/upload.svg" alt="Uploads" class="stat-icon"/>
+              <div class="stat-content">
+                <span class="stat-label">Uploads</span>
+                <strong>
+                  <LazyCounter :value="user!.upload_count" />
+                </strong>
+              </div>
             </div>
             <div class="stat-tile">
-              <span class="stat-label">Accepted</span>
-              <strong>
-                <LazyCounter :value="user!.accepted_upload_count" />
-              </strong>
+              <img src="/icons/checkmark.svg" alt="Accepted" class="stat-icon"/>
+              <div class="stat-content">
+                <span class="stat-label">Accepted</span>
+                <strong>
+                  <LazyCounter :value="user!.accepted_upload_count" />
+                </strong>
+              </div>
             </div>
             <div class="stat-tile">
-              <span class="stat-label">Unique levels</span>
-              <strong>
-                <LazyCounter :value="user!.level_count" />
-              </strong>
+              <img src="/icons/levels.svg" alt="Unique levels" class="stat-icon"/>
+              <div class="stat-content">
+                <span class="stat-label">Unique levels</span>
+                <strong>
+                  <LazyCounter :value="user!.level_count" />
+                </strong>
+              </div>
             </div>
             <div class="stat-tile">
-              <span class="stat-label">Active thumbnails</span>
-              <strong>
-                <LazyCounter :value="user!.active_thumbnail_count" />
-              </strong>
+              <img src="/icons/active.svg" alt="Active thumbnails" class="stat-icon"/>
+              <div class="stat-content">
+                <span class="stat-label">Active thumbnails</span>
+                <strong>
+                  <LazyCounter :value="user!.active_thumbnail_count" />
+                </strong>
+              </div>
             </div>
           </div>
 
@@ -336,17 +348,26 @@ onMounted(loadDashboard);
           </div>
 
           <div class="insights-grid activity-insights">
-            <div class="insight-box">
-              <span class="stat-label">Rejected uploads</span>
-              <strong>{{ rejectionCount.toLocaleString() }}</strong>
+            <div class="stat-tile">
+              <img src="/icons/rejected.svg" alt="Rejected uploads" class="stat-icon"/>
+              <div class="stat-content">
+                <span class="stat-label">Rejected uploads</span>
+                <strong>{{ rejectionCount.toLocaleString() }}</strong>
+              </div>
             </div>
-            <div class="insight-box">
-              <span class="stat-label">Pending uploads</span>
-              <strong>{{ user!.pending_upload_count.toLocaleString() }}</strong>
+            <div class="stat-tile">
+              <img src="/icons/pending2.svg" alt="Pending uploads" class="stat-icon"/>
+              <div class="stat-content">
+                <span class="stat-label">Pending uploads</span>
+                <strong>{{ user!.pending_upload_count.toLocaleString() }}</strong>
+              </div>
             </div>
-            <div class="insight-box">
-              <span class="stat-label">Replaced thumbnails</span>
-              <strong>{{ replacementCount.toLocaleString() }}</strong>
+            <div class="stat-tile">
+              <img src="/icons/replacement.svg" alt="Replaced thumbnails" class="stat-icon"/>
+              <div class="stat-content">
+                <span class="stat-label">Replaced thumbnails</span>
+                <strong>{{ replacementCount.toLocaleString() }}</strong>
+              </div>
             </div>
           </div>
         </article>
@@ -539,15 +560,30 @@ onMounted(loadDashboard);
   gap: 14px;
 }
 
-.stat-tile,
-.insight-box {
+.stat-tile {
   background: rgba(0, 0, 0, 0.16);
   border-radius: 14px;
   padding: 16px;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.stat-icon {
+  width: 32px;
+  height: 32px;
+  opacity: 0.9;
+  flex-shrink: 0;
+}
+
+.stat-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .stat-tile strong,
-.insight-box strong,
 .hero-metric strong {
   font-size: 1.5rem;
   line-height: 1.1;
