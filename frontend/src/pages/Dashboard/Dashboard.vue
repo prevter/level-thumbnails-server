@@ -722,11 +722,6 @@ onMounted(loadDashboard);
     padding: 18px;
   }
 
-  .chart-card,
-  .chart-card-wide {
-    min-height: 220px;
-  }
-
   .hero-metrics,
   .insights-grid,
   .stats-grid {

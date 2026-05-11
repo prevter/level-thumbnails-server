@@ -33,6 +33,7 @@ onBeforeUnmount(() => chart?.destroy());
 .chart-wrap {
   position: relative;
   width: 100%;
+  height: 100%;
   min-height: 0;
 }
 
@@ -40,6 +41,7 @@ canvas {
   display: block;
   width: 100% !important;
   height: 100% !important;
+  max-height: 100%;
 }
 </style>
 
