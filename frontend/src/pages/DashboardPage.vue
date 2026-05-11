@@ -369,6 +369,10 @@ main {
     display: none;
   }
 
+  .nav-toggle {
+    display: none;
+  }
+
   .content {
     margin: 10px;
     padding: 10px 10px 80px;
