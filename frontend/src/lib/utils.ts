@@ -1,3 +1,6 @@
+import { RATING_NAMES, DIFFICULTY_NAMES, LENGTH_NAMES } from './types';
+import type { SubmissionNotesObject } from './types';
+
 export function unwrap<T>(payload: unknown): T {
   if (payload && typeof payload === 'object' && 'data' in payload) {
     return (payload as { data: T }).data;
@@ -45,3 +48,32 @@ export function formatDateTime(timestamp: string) {
   });
 }
 
+export function parseSubmissionNote(note: string | null): SubmissionNotesObject | null {
+  if (!note) return null;
+
+  const parts = note.split(';');
+  const data: Record<string, string> = {};
+  for (const part of parts) {
+    const [key, ...rest] = part.split('=');
+    if (key && rest.length > 0) {
+      data[key] = rest.join('=');
+    }
+  }
+
+  if (!data.v || data.v !== '1') return null;
+
+  return {
+    level_name: data.ln || null,
+    creator_id: Number(data.ci) || null,
+    creator_name: data.cn || null,
+    downloads: Number(data.dw) || null,
+    likes: Number(data.lk) || null,
+    stars: Number(data.ls) || null,
+    length: LENGTH_NAMES[Number(data.ll) as number] || null,
+    rating: RATING_NAMES[Number(data.lr) as number] || 'NA',
+    difficulty: DIFFICULTY_NAMES[Number(data.ld) as number] || 'NA',
+    percentage: Number(data.pr) || null,
+    attempt_time: Number(data.tm) || null,
+    message: data.m || null,
+  };
+}

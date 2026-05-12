@@ -48,6 +48,25 @@ export interface ServerSettings {
   min_supported_client: string;
 }
 
+export const RATING_NAMES = ['NA', 'Rated', 'Featured', 'Epic', 'Legendary', 'Mythic'] as const;
+export const DIFFICULTY_NAMES = ['NA', 'Auto', 'Easy', 'Normal', 'Hard', 'Harder', 'Insane', 'Easy Demon', 'Medium Demon', 'Hard Demon', 'Insane Demon', 'Extreme Demon'] as const;
+export const LENGTH_NAMES = ['Tiny', 'Short', 'Medium', 'Long', 'XL', 'Plat'] as const;
+
+export interface SubmissionNotesObject {
+  level_name: string | null;
+  creator_id: number | null;
+  creator_name: string | null;
+  downloads: number | null;
+  likes: number | null;
+  stars: number | null;
+  length: typeof LENGTH_NAMES[number] | null;
+  rating: typeof RATING_NAMES[number] | null;
+  difficulty: typeof DIFFICULTY_NAMES[number] | null;
+  percentage: number | null;
+  attempt_time: number | null;
+  message: string | null;
+}
+
 export interface PendingItem {
   id: number;
   user_id: number;
@@ -56,6 +75,8 @@ export interface PendingItem {
   accepted: boolean;
   replacement: boolean;
   upload_time: string;
+  submission_note: string | null;
+  note_data: SubmissionNotesObject | null | undefined; // populated on load
 }
 
 export interface PendingResponse {

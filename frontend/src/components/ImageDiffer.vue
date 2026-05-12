@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed, ref} from "vue";
+import { computed, ref } from "vue";
 
 const props = defineProps<{
   srcA: string;
@@ -92,82 +92,55 @@ const imageTransform = computed(() => {
 </script>
 
 <template>
-  <div class="image-differ">
-    <div class="controls" v-if="hasBothImages">
-      <button
-        class="btn"
-        :class="{
-          'btn-primary': viewMode === 'a',
-          'btn-secondary': viewMode !== 'a'
-        }"
-        @click="setViewMode('a')"
-      >
-        New Thumbnail
-      </button>
-      <button
-        class="btn"
-        :class="{
-          'btn-primary': viewMode === 'b',
-          'btn-secondary': viewMode !== 'b'
-        }"
-        @click="setViewMode('b')"
-      >
-        Original Thumbnail
-      </button>
-      <button
-        class="btn"
-        :class="{
-          'btn-primary': viewMode === 'side-by-side',
-          'btn-secondary': viewMode !== 'side-by-side'
-        }"
-        @click="setViewMode('side-by-side')"
-      >
-        Side by Side
-      </button>
-    </div>
-
-    <div class="images-container" :class="{ 'side-by-side': isSideBySide }">
-      <div v-if="showImageA" class="image-wrapper">
-        <img
-          :src="props.srcA"
-          alt="New Thumbnail"
-          @click="handleImageClick('a')"
-          class="clickable"
-        />
-        <span class="image-label" v-if="hasBothImages">New Thumbnail</span>
-      </div>
-      <div v-if="showImageB && props.srcB" class="image-wrapper">
-        <img
-          :src="props.srcB"
-          alt="Original Thumbnail"
-          @click="handleImageClick('b')"
-          class="clickable"
-        />
-        <span class="image-label" v-if="hasBothImages">Original Thumbnail</span>
-      </div>
-    </div>
-
-    <div v-if="isZoomed" class="zoom-modal" @click="closeZoom" @wheel="handleWheel">
-      <div class="zoom-content" @click.stop>
-        <button class="close-button" @click="closeZoom">✕</button>
-        <div class="zoom-info">
-          Zoom: {{ Math.round(zoomLevel * 100) }}% | Scroll to zoom | Drag to pan
+  <div class="w-100">
+    <div class="image-differ">
+      <div class="card-header">
+        <h3 class="card-title">Preview</h3>
+        <div class="controls" v-if="hasBothImages">
+          <button class="btn-sm" :class="{
+            'btn-primary': viewMode === 'a',
+            'btn-secondary': viewMode !== 'a'
+          }" @click="setViewMode('a')">
+            New Thumbnail
+          </button>
+          <button class="btn-sm" :class="{
+            'btn-primary': viewMode === 'b',
+            'btn-secondary': viewMode !== 'b'
+          }" @click="setViewMode('b')">
+            Original Thumbnail
+          </button>
+          <button class="btn-sm" :class="{
+            'btn-primary': viewMode === 'side-by-side',
+            'btn-secondary': viewMode !== 'side-by-side'
+          }" @click="setViewMode('side-by-side')">
+            Side by Side
+          </button>
         </div>
-        <div
-          class="zoom-image-container"
-          @mousedown="handleMouseDown"
-          @mousemove="handleMouseMove"
-          @mouseup="handleMouseUp"
-          @mouseleave="handleMouseLeave"
-        >
-          <img
-            :src="getZoomedImageSrc"
-            :alt="`Zoomed Image ${zoomImage?.toUpperCase()}`"
-            :style="{ transform: imageTransform }"
-            :class="{ dragging: isDragging }"
-            @wheel="handleWheel"
-            @dragstart.prevent
-          />
+      </div>
+
+      <div class="images-container" :class="{ 'side-by-side': isSideBySide }">
+        <div v-if="showImageA" class="image-wrapper">
+          <img :src="props.srcA" alt="New Thumbnail" @click="handleImageClick('a')" class="clickable" />
+          <span class="image-label" v-if="hasBothImages">New Thumbnail</span>
+        </div>
+        <div v-if="showImageB && props.srcB" class="image-wrapper">
+          <img :src="props.srcB" alt="Original Thumbnail" @click="handleImageClick('b')" class="clickable" />
+          <span class="image-label" v-if="hasBothImages">Original Thumbnail</span>
+        </div>
+      </div>
+
+      <div v-if="isZoomed" class="zoom-modal" @click="closeZoom" @wheel="handleWheel">
+        <div class="zoom-content" @click.stop>
+          <button class="close-button" @click="closeZoom">✕</button>
+          <div class="zoom-info">
+            Zoom: {{ Math.round(zoomLevel * 100) }}% | Scroll to zoom | Drag to pan
+          </div>
+          <div class="zoom-image-container" @mousedown="handleMouseDown" @mousemove="handleMouseMove"
+            @mouseup="handleMouseUp" @mouseleave="handleMouseLeave">
+            <img :src="getZoomedImageSrc" :alt="`Zoomed Image ${zoomImage?.toUpperCase()}`"
+              :style="{ transform: imageTransform }" :class="{ dragging: isDragging }" @wheel="handleWheel"
+              @dragstart.prevent />
+          </div>
         </div>
       </div>
     </div>
@@ -179,6 +152,18 @@ const imageTransform = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .controls {
@@ -197,7 +182,7 @@ const imageTransform = computed(() => {
   flex-direction: column;
   gap: 1rem;
   align-items: center;
-  margin-bottom: 1rem;
+  padding: 0.75rem 1.25rem;
 }
 
 .images-container.side-by-side {
@@ -242,7 +227,7 @@ const imageTransform = computed(() => {
 .image-label {
   text-align: center;
   font-size: 0.9rem;
-  color: #666;
+  color: #999;
   font-weight: 500;
 }
 

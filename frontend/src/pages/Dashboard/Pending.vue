@@ -2,8 +2,20 @@
 import {ref, onMounted, watch, computed, onBeforeUnmount} from "vue";
 import LoadingCircle from "../../components/LoadingCircle.vue";
 import ImageDiffer from "../../components/ImageDiffer.vue";
+import DifficultyFace from "../../components/DifficultyFace.vue";
 import type { PendingItem, PendingResponse } from "../../lib/types";
-import { fetchJson } from "../../lib/utils";
+import { fetchJson, parseSubmissionNote } from "../../lib/utils";
+
+const REJECT_PRESETS = [
+  "Original was better",
+  "Screenshot bug",
+  "Dead/About to die",
+  "Noclip",
+  "Obvious speedhack",
+  "Visible overlays",
+  "Low quality",
+  "Title card"
+];
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -88,6 +100,9 @@ async function fetchPendingItems() {
     }
 
     const data = await fetchJson<PendingResponse>(`/pending?${params.toString()}`);
+    for (const item of data.uploads) {
+      item.note_data = parseSubmissionNote(item.submission_note);
+    }
 
     pendingItems.value = data.uploads;
     totalItems.value = data.total;
@@ -203,6 +218,12 @@ function closeItem() {
   }
 }
 
+function secToMinSec(seconds: number) {
+  const mins = Math.floor(seconds / 60);
+  const secs = (seconds % 60).toFixed(2);
+  return `${mins}:${secs.padStart(5, '0')}`;
+}
+
 </script>
 
 <template>
@@ -215,13 +236,125 @@ function closeItem() {
   </div>
   <div v-else>
     <div v-if="selectedItem" class="selected-item page-transition">
-      <button @click="closeItem()" class="btn btn-secondary">Back to Thumbnails</button>
+      <div class="d-flex w-100 justify-content-between align-items-center mb-1">
+        <button @click="closeItem()" class="btn btn-dark">&larr; Back To List</button>
+        <div class="card">
+          <span class="card-subtitle">Submitted By</span>
+          <p class="card-text">
+            <img src="/icons/user.svg" alt="User Icon" />
+            <span :title="`User ID: ${selectedItem!.user_id}`">{{ selectedItem!.username }}</span>
+            <img src="/icons/verified.svg" alt="Creator Badge" style="margin-left: 4px;" v-if="selectedItem!.note_data?.creator_name == selectedItem!.username" />
+            <span v-if="selectedItem!.replacement" class="subtitle">&bullet; Replacement</span>
+          </p>
+        </div>
+      </div>
 
-      <h3 class="text-center">
-        Level ID: {{ selectedItem!.level_id }}
-        <span v-if="selectedItem!.replacement">(Replacement)</span><br/>
-        Submitted by: {{ selectedItem!.username }}
-      </h3>
+      <div class="info-grid mb-1">
+        <div class="card info-main">
+          <div class="card-submission-note">
+            <div class="p-05">
+              <DifficultyFace 
+                :difficulty="selectedItem!.note_data?.difficulty || 'NA'"
+                :stars="selectedItem!.note_data?.stars || 0"
+                :rate="selectedItem!.note_data?.rating || 'NA'"
+                :moons="selectedItem!.note_data?.length == 'Plat' || false"
+                :size="64" />
+            </div>
+            <div class="card-content">
+              <p class="card-text">
+                <span class="main-text">
+                  {{ selectedItem!.note_data?.level_name || 'Unknown Level' }}
+                  <br/>
+                </span>
+                <span class="subtitle">
+                  ID: {{ selectedItem!.level_id }}
+                  <br/>
+                </span>
+                <span v-if="selectedItem!.note_data?.creator_name" :title="`ID: ${selectedItem!.note_data.creator_id}`" class="stat-row-label">
+                  <img src="/icons/user.svg" alt="Creator" />
+                  {{ selectedItem!.note_data?.creator_name }}
+                </span>
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="card info-side">
+          <span class="card-subtitle">Level Statistics</span>
+          <p class="card-text">
+            <p v-if="selectedItem!.note_data?.downloads" class="card-stat-row">
+              <span class="stat-row-label">
+                <img src="/icons/download.svg" alt="Download Icon" />
+                Downloads
+              </span>
+              <span class="stat-row-value">
+                {{ selectedItem!.note_data.downloads.toLocaleString() }}<br/>
+              </span>
+            </p>
+            <p v-if="selectedItem!.note_data?.likes" class="card-stat-row">
+              <span class="stat-row-label">
+                <img src="/icons/like.svg" alt="Like Icon" />
+                Likes
+              </span>
+              <span class="stat-row-value">
+                {{ selectedItem!.note_data.likes.toLocaleString() }}<br/>
+              </span>
+            </p>
+            <p v-if="selectedItem!.note_data?.length" class="card-stat-row">
+              <span class="stat-row-label">
+                <img src="/icons/clock.svg" alt="Clock Icon" />
+                Length
+              </span>
+              <span class="stat-row-value">
+                {{ selectedItem!.note_data.length }}<br/>
+              </span>
+            </p>
+          </p>
+        </div>
+        <div class="card info-side">
+          <span class="card-subtitle">Screenshot Details</span>
+          <p class="card-text">
+            <p class="card-stat-row">
+              <span class="stat-row-label">
+                <img src="/icons/calendar.svg" alt="Calendar Icon" />
+                Uploaded On
+              </span>
+              <span class="stat-row-value date-value" :title="new Date(selectedItem!.upload_time).toLocaleString()">
+                {{ new Date(selectedItem!.upload_time).toLocaleString() }}
+              </span>
+            </p>
+
+            <p class="card-stat-row" v-if="selectedItem!.note_data?.attempt_time">
+              <span class="stat-row-label">
+                <img src="/icons/timer.svg" alt="Clock Icon" />
+                Attempt Time
+              </span>
+              <span class="stat-row-value">
+                {{ secToMinSec(selectedItem!.note_data.attempt_time) }}
+              </span>
+            </p>
+  
+            <p class="card-stat-row" v-if="selectedItem!.note_data?.percentage">
+              <span class="stat-row-label">
+                <img src="/icons/percent.svg" alt="Progress Icon" />
+                Progress
+              </span>
+              <span class="stat-row-value">
+                {{ selectedItem!.note_data.percentage.toFixed(2) }}%
+              </span>
+            </p>
+          </p>
+        </div>
+      </div>
+
+      <div class="w-100 px-1">
+        <div class="card card-submission-note mb-1" v-if="selectedItem!.note_data?.message">
+          <img src="/icons/chat.svg" alt="Note Icon" class="card-icon" />
+          <div class="card-content">
+            <span class="card-subtitle">Submission Note</span>
+            <p class="card-text">{{ selectedItem!.note_data.message }}</p>
+          </div>
+        </div>
+      </div>
 
       <ImageDiffer
           :src-a="`/pending/${selectedItem!.id}/image`"
@@ -229,27 +362,33 @@ function closeItem() {
       />
       <div class="filler"></div>
 
-      <div class="d-flex flex-col gap-1 w-100 sensitive-actions">
-        <button @click="thumbnailAction(selectedItem!.id, true)" class="btn btn-success">
-          Accept
-        </button>
-        <div class="d-flex">
-          <input type="text" ref="rejectReasonField" v-model="rejectReason" required class="flex-3 form-control"
-                 placeholder="Reason for rejection" list="rejectReasons"/>
+      <div class="w-100 px-1 mt-1">
+        <div class="card card-submission-note flex-col">
+          <span class="subtitle-2">Rejection Reason</span>
 
-          <datalist id="rejectReasons">
-            <option value="Progress bar/percentage"/>
-            <option value="Using Noclip"/>
-            <option value="Low Quality"/>
-            <option value="JPEGgy"/>
-            <option value="Stretched"/>
-            <option value="Title Card"/>
-            <option value="Overlays"/>
-          </datalist>
-
-          <button @click="thumbnailAction(selectedItem!.id, false)" class="btn btn-danger flex-1">
-            Reject
-          </button>
+          <div class="d-flex justify-content-start gap-05 flex-wrap">
+            <button @click="rejectReason = preset" class="btn-sm btn-secondary" v-for="preset in REJECT_PRESETS" :key="preset">
+              {{ preset }}
+            </button>
+          </div>
+          
+          <div class="w-100 d-flex">
+            <textarea v-model="rejectReason" ref="rejectReasonField" class="form-control flex-1" 
+              placeholder="Enter reason for rejection here..." rows="3" 
+              :disabled="fullscreenLoading">
+            </textarea>
+          </div>
+          
+          <div class="d-flex w-100 gap-1">
+            <button @click="thumbnailAction(selectedItem!.id, false)" class="btn btn-danger flex-1">
+              <img src="/icons/cross.svg" alt="Reject Icon" style="vertical-align: middle; margin-right: 4px;" />
+              Reject
+            </button>
+            <button @click="thumbnailAction(selectedItem!.id, true)" class="btn btn-success flex-1">
+              <img src="/icons/check.svg" alt="Accept Icon" style="vertical-align: middle; margin-right: 4px;" />
+              Accept
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -378,9 +517,10 @@ function closeItem() {
         <div v-for="item in paginatedItems" :key="item.id" class="image-item" @click="openItem(item)">
           <img :src="`/pending/${item.id}/image`" alt="Thumbnail" class="thumbnail-image" loading="lazy"/>
           <div class="thumbnail-info">
-            By {{ item.username }}<br/>
-            Level ID: {{ item.level_id }}<br/>
+            {{ item.note_data?.level_name || 'Unknown Level' }} (ID: {{ item.level_id }})<br/>
+            Submitted by {{ item.username }}<br/>
             <span v-if="item.replacement" class="replacement-badge">Replacement</span>
+            <span v-if="item.note_data?.creator_name == item.username" class="creator-badge">Level Creator</span>
           </div>
         </div>
       </div>
@@ -390,6 +530,150 @@ function closeItem() {
 </template>
 
 <style scoped>
+/* Entry viewer styles */
+
+.card {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 0.75rem 1.25rem;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+}
+
+.card-subtitle {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 0.25rem;
+}
+
+.card-text {
+  font-size: 1rem;
+  font-weight: 500;
+  margin: 0 0 0.25rem;
+  vertical-align: middle
+}
+
+.card-text img {
+  vertical-align: middle;
+}
+
+.subtitle {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-left: 4px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr) minmax(260px, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.info-main {
+  min-height: 64px;
+  min-width: 0;
+}
+
+.info-side {
+  min-height: 64px;
+  min-width: 0;
+}
+
+.card-submission-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.card-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.card-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-text {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.card-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  margin-block-start: 0.25rem;
+  margin-block-end: 0.25rem;
+}
+
+.stat-row-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.stat-row-value {
+  font-weight: 500;
+  font-size: 0.95rem;
+  text-align: right;
+}
+
+.date-value {
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-stat-row img {
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.subtitle-2 {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+textarea.form-control {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  color: #fff;
+  padding: 8px;
+}
+
+@container (max-width: 1100px) {
+  .info-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 1fr);
+  }
+
+  .info-main {
+    grid-column: 1 / -1;
+  }
+}
+
+@container (max-width: 760px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* General styles */
+
 .error-message {
   display: flex;
   flex-direction: column;
@@ -479,6 +763,17 @@ function closeItem() {
   font-size: 0.85em;
   font-weight: bold;
   margin-top: 4px;
+  margin-right: 4px;
+}
+
+.creator-badge {
+  display: inline-block;
+  background: rgba(30, 144, 255, 0.8);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-weight: bold;
+  margin-top: 4px;
 }
 
 .pagination-container {
@@ -527,6 +822,7 @@ function closeItem() {
   align-items: center;
   margin-top: 20px;
   height: 100%;
+  container-type: inline-size;
 }
 
 .sensitive-actions {
