@@ -195,6 +195,13 @@ pub async fn upload(
         Err(response) => return response,
     };
 
+    if submission_note.is_none() {
+        return util::str_response(
+            StatusCode::BAD_REQUEST,
+            "Missing submission note.",
+        );
+    }
+
     match db.get_level_lock(id as i64).await {
         Ok(Some(lock)) => {
             return util::response(
