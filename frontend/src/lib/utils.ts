@@ -55,7 +55,7 @@ export function parseSubmissionNote(note: string | null): SubmissionNotesObject 
   const data: Record<string, string> = {};
   for (const part of parts) {
     const [key, ...rest] = part.split('=');
-    if (key && rest.length > 0) {
+    if (key && rest.length > 0 && data[key] === undefined) {
       data[key] = rest.join('=');
     }
   }
