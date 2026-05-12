@@ -455,7 +455,7 @@ function secToMinSec(seconds: number) {
                 class="btn btn-secondary btn-sm"
                 title="First page"
             >
-              ⏮
+              <img src="/icons/first.svg" alt="⏮" class="nav-icon" />
             </button>
 
             <button
@@ -463,7 +463,7 @@ function secToMinSec(seconds: number) {
                 :disabled="currentPage === 1"
                 class="btn btn-secondary btn-sm"
             >
-              ◂
+              <img src="/icons/previous.svg" alt="◂" class="nav-icon" />
             </button>
 
             <span class="page-info">
@@ -475,7 +475,7 @@ function secToMinSec(seconds: number) {
                 :disabled="currentPage === totalPages"
                 class="btn btn-secondary btn-sm"
             >
-              ▸
+              <img src="/icons/next.svg" alt="▸" class="nav-icon" />
             </button>
 
             <button
@@ -484,7 +484,7 @@ function secToMinSec(seconds: number) {
                 class="btn btn-secondary btn-sm"
                 title="Last page"
             >
-              ⏭
+              <img src="/icons/last.svg" alt="⏭" class="nav-icon" />
             </button>
 
             <input
@@ -803,6 +803,13 @@ textarea.form-control {
 .page-info {
   margin: 0 12px;
   font-weight: 500;
+}
+
+.nav-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  vertical-align: middle;
 }
 
 .btn-sm {

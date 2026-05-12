@@ -151,7 +151,6 @@ const imageTransform = computed(() => {
 .image-differ {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.05);
