@@ -76,6 +76,8 @@ export interface PendingItem {
   replacement: boolean;
   upload_time: string;
   submission_note: string | null;
+  account_id: number | null;
+  user_role: 'user' | 'verified' | 'moderator' | 'admin';
   note_data: SubmissionNotesObject | null | undefined; // populated on load
 }
 

@@ -112,6 +112,8 @@ pub struct PendingUpload {
     pub accepted: bool,
     pub upload_time: NaiveDateTime,
     pub submission_note: Option<String>,
+    pub account_id: Option<i64>,
+    pub user_role: Role,
 
     #[sqlx(skip)]
     pub replacement: bool,
@@ -482,7 +484,7 @@ impl AppState {
     ) -> Result<PendingUploadsPage, sqlx::Error> {
         if options.replacement_only || options.new_only {
             let mut data_builder = QueryBuilder::new(
-                "SELECT uploads.id, user_id, username, level_id, accepted, upload_time, submission_note FROM uploads
+                "SELECT uploads.id, user_id, users.username AS username, level_id, accepted, upload_time, submission_note, users.account_id AS account_id, users.role AS user_role FROM uploads
                  LEFT JOIN users ON users.id = user_id
                  WHERE accepted = FALSE AND accepted_time IS NULL",
             );
@@ -509,7 +511,7 @@ impl AppState {
             let offset = ((options.page.saturating_sub(1)) as i64) * per_page;
 
             let mut data_builder = QueryBuilder::new(
-                "SELECT uploads.id, user_id, username, level_id, accepted, upload_time, submission_note FROM uploads
+                "SELECT uploads.id, user_id, users.username AS username, level_id, accepted, upload_time, submission_note, users.account_id AS account_id, users.role AS user_role FROM uploads
                  LEFT JOIN users ON users.id = user_id
                  WHERE accepted = FALSE AND accepted_time IS NULL",
             );
@@ -556,7 +558,7 @@ impl AppState {
         user_id: i64,
     ) -> Result<Vec<PendingUpload>, sqlx::Error> {
         sqlx::query_as::<_, PendingUpload>(
-            "SELECT uploads.id, user_id, username, level_id, accepted, upload_time, submission_note FROM uploads
+            "SELECT uploads.id, user_id, users.username AS username, level_id, accepted, upload_time, submission_note, users.account_id AS account_id, users.role AS user_role FROM uploads
               LEFT JOIN users ON users.id = user_id
               WHERE accepted = FALSE AND accepted_time IS NULL AND user_id = $1
               ORDER BY upload_time",
@@ -568,7 +570,7 @@ impl AppState {
 
     pub async fn get_pending_upload(&self, id: i64) -> Result<PendingUpload, sqlx::Error> {
         sqlx::query_as::<_, PendingUpload>(
-            "SELECT uploads.id, user_id, username, level_id, accepted, upload_time, submission_note FROM uploads
+            "SELECT uploads.id, user_id, users.username AS username, level_id, accepted, upload_time, submission_note, users.account_id AS account_id, users.role AS user_role FROM uploads
               LEFT JOIN users ON users.id = user_id
               WHERE accepted = FALSE AND accepted_time IS NULL AND uploads.id = $1",
         )

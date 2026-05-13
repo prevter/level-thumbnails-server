@@ -202,23 +202,26 @@ pub async fn upload(
         );
     }
 
-    match db.get_level_lock(id as i64).await {
-        Ok(Some(lock)) => {
-            return util::response(
-                StatusCode::LOCKED,
-                serde_json::json!({
-                    "status": 423,
-                    "message": "Thumbnail submissions are locked for this level",
-                    "reason": lock.reason
-                }),
-            );
-        }
-        Ok(None) => {}
-        Err(e) => {
-            return util::str_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to check level lock: {}", e),
-            );
+    // allow admins to bypass locks
+    if user.role != database::Role::Admin {
+        match db.get_level_lock(id as i64).await {
+            Ok(Some(lock)) => {
+                return util::response(
+                    StatusCode::LOCKED,
+                    serde_json::json!({
+                        "status": 423,
+                        "message": "Thumbnail submissions are locked for this level",
+                        "reason": lock.reason
+                    }),
+                );
+            }
+            Ok(None) => {}
+            Err(e) => {
+                return util::str_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    &format!("Failed to check level lock: {}", e),
+                );
+            }
         }
     }
 

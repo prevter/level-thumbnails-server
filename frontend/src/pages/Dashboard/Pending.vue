@@ -14,7 +14,8 @@ const REJECT_PRESETS = [
   "Obvious speedhack",
   "Visible overlays",
   "Low quality",
-  "Title card"
+  "No gameplay in thumbnail",
+  "Too close to start"
 ];
 
 const loading = ref(true);
@@ -241,9 +242,10 @@ function secToMinSec(seconds: number) {
         <div class="card">
           <span class="card-subtitle">Submitted By</span>
           <p class="card-text">
-            <img src="/icons/user.svg" alt="User Icon" />
+            <img :src="selectedItem!.user_role == 'user' ? '/icons/user.svg' : '/icons/verified-user.svg'"
+              :alt="selectedItem!.user_role == 'user' ? 'User' : 'Verified User'" class="user-icon" />
             <span :title="`User ID: ${selectedItem!.user_id}`">{{ selectedItem!.username }}</span>
-            <img src="/icons/verified.svg" alt="Creator Badge" style="margin-left: 4px;" v-if="selectedItem!.note_data?.creator_name == selectedItem!.username" />
+            <img src="/icons/verified.svg" alt="Creator Badge" style="margin-left: 4px;" v-if="selectedItem!.account_id && selectedItem!.note_data?.creator_id === selectedItem!.account_id" />
             <span v-if="selectedItem!.replacement" class="subtitle">&bullet; Replacement</span>
           </p>
         </div>
@@ -646,6 +648,10 @@ function secToMinSec(seconds: number) {
 .subtitle-2 {
   font-size: 1rem;
   color: rgba(255, 255, 255, 0.9);
+}
+
+.user-icon {
+  user-select: none;
 }
 
 textarea.form-control {
