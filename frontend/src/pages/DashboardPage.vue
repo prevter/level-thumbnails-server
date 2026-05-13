@@ -381,6 +381,12 @@ main {
     background-color: transparent;
   }
 
+  @media (-webkit-min-device-pixel-ratio:0) {
+    .content > div {
+      padding-bottom: 80px;
+    }
+  }
+
   .navbar {
     flex-direction: row;
     flex-wrap: nowrap;
