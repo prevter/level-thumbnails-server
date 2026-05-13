@@ -382,7 +382,7 @@ main {
   }
 
   @media (-webkit-min-device-pixel-ratio:0) {
-    .content > div {
+    .content :deep(div) {
       padding-bottom: 80px;
     }
   }
