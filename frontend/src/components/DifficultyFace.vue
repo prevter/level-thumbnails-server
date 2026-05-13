@@ -36,7 +36,7 @@ const DIFFICULTY_FILES = {
 function getImagePath(difficulty: string, rating: string): string {
     const difficultyFile = DIFFICULTY_FILES[difficulty as keyof typeof DIFFICULTY_FILES] || 'unrated';
     const ratingFile = RATING_FILES[rating as keyof typeof RATING_FILES] || '';
-    return `https://gdbrowser.com/assets/difficulties/${difficultyFile}${ratingFile}.png`;
+    return `/difficulties/${difficultyFile}${ratingFile}.webp`;
 }
 </script>
 
