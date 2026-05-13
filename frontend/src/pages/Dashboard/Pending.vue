@@ -19,6 +19,7 @@ const REJECT_PRESETS = [
 ];
 
 const loading = ref(true);
+const refreshing = ref(false);
 const error = ref<string | null>(null);
 const pendingItems = ref<PendingItem[]>([]);
 const selectedItem = ref<PendingItem | null>(null);
@@ -78,7 +79,11 @@ watch(selectedItem, () => {
 });
 
 async function fetchPendingItems() {
-  loading.value = true;
+  const isInitialLoad = loading.value && pendingItems.value.length === 0 && selectedItem.value === null;
+  if (!isInitialLoad) {
+    refreshing.value = true;
+  }
+
   error.value = null;
 
   try {
@@ -110,7 +115,10 @@ async function fetchPendingItems() {
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'An unknown error occurred';
   } finally {
-    loading.value = false;
+    if (isInitialLoad) {
+      loading.value = false;
+    }
+    refreshing.value = false;
   }
 }
 
@@ -201,6 +209,10 @@ function handlePageInputChange() {
   }
 }
 
+function sanitizeLevelIdInput() {
+  filterLevelId.value = filterLevelId.value.replace(/[^0-9]/g, '');
+}
+
 function openItem(item: PendingItem) {
   try {
     history.pushState({pendingItemId: item.id}, "", window.location.href);
@@ -231,11 +243,11 @@ function secToMinSec(seconds: number) {
   <div v-if="loading" class="d-flex flex-middle h-100">
     <LoadingCircle/>
   </div>
-  <div v-else-if="error" class="error-message">
-    <img src="/error.svg" alt="Error Icon" style="width: 128px; height: auto;"/>
-    <p>{{ error }}</p>
-  </div>
   <div v-else>
+    <div v-if="error && pendingItems.length === 0" class="error-message">
+      <img src="/error.svg" alt="Error Icon" style="width: 128px; height: auto;"/>
+      <p>{{ error }}</p>
+    </div>
     <div v-if="selectedItem" class="selected-item page-transition">
       <div class="d-flex w-100 justify-content-between align-items-center mb-1">
         <button @click="closeItem()" class="btn btn-dark">&larr; Back To List</button>
@@ -395,7 +407,16 @@ function secToMinSec(seconds: number) {
       </div>
     </div>
     <div v-else class="page-transition">
-      <div class="filters-container">
+      <div class="filters-container search-panel">
+        <div class="search-panel-header">
+          <div>
+            <span class="panel-kicker">Pending Queue</span>
+          </div>
+          <div class="filter-results">
+            Total {{ totalItems }} items
+          </div>
+        </div>
+
         <div class="filters-grid">
           <div class="filter-item">
             <label for="filterReplacement">Type:</label>
@@ -440,13 +461,13 @@ function secToMinSec(seconds: number) {
                 id="filterLevelId"
                 type="text"
                 v-model="filterLevelId"
+                @input="sanitizeLevelIdInput()"
                 class="form-control"
+                inputmode="numeric"
+                pattern="[0-9]*"
                 placeholder="Search by level ID"
             />
           </div>
-        </div>
-        <div class="filter-results">
-          Showing {{ pendingItems.length }} of {{ totalItems }} items
         </div>
 
         <div v-if="totalPages > 1" class="pagination-container">
@@ -528,6 +549,7 @@ function secToMinSec(seconds: number) {
       </div>
     </div>
   </div>
+  <LoadingCircle backdrop v-if="refreshing"/>
   <LoadingCircle backdrop v-if="fullscreenLoading"/>
 </template>
 
@@ -691,40 +713,66 @@ textarea.form-control {
 }
 
 .filters-container {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
   padding: 20px;
   margin-bottom: 24px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(10px);
 }
 
-.filters-container h3 {
-  margin-top: 0;
-  margin-bottom: 16px;
+.search-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.search-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.search-panel h3 {
+  margin: 2px 0 0;
+  font-size: 1.25rem;
+  line-height: 1.15;
+}
+
+.panel-kicker {
+  display: inline-block;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .filters-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
 }
 
 .filter-item {
   display: flex;
   flex-direction: column;
+  gap: 6px;
 }
 
 .filter-item label {
-  margin-bottom: 6px;
   font-weight: 500;
-  font-size: 0.9em;
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .filter-results {
-  text-align: center;
-  font-size: 0.95em;
-  opacity: 0.8;
-  margin-top: 8px;
+  text-align: right;
+  font-size: 0.92rem;
+  opacity: 0.82;
+  white-space: nowrap;
 }
 
 .image-grid {
@@ -788,27 +836,32 @@ textarea.form-control {
   gap: 16px;
   align-items: center;
   justify-content: center;
-  margin-top: 16px;
-  padding: 8px;
+  margin-top: 4px;
+  padding: 14px 0 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .pagination-controls {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
   flex-wrap: wrap;
   justify-content: center;
+  padding: 10px 0;
 }
 
 .pagination-input-field {
-  width: 120px;
-  padding: 6px 12px;
-  max-height: 32px;
+  width: 140px;
+  padding: 8px 12px;
+  max-height: 38px;
 }
 
 .page-info {
-  margin: 0 12px;
+  margin: 0 10px;
   font-weight: 500;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
 }
 
 .nav-icon {
@@ -819,8 +872,65 @@ textarea.form-control {
 }
 
 .btn-sm {
-  padding: 6px 12px;
+  padding: 7px 12px;
   font-size: 0.9em;
+  border-radius: 10px;
+}
+
+.pagination-controls .btn-sm {
+  min-width: 40px;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pagination-controls .btn-sm:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.pagination-controls .btn-sm:disabled {
+  opacity: 0.55;
+}
+
+.filters-container :deep(.form-control) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+}
+
+.filters-container :deep(.form-control::placeholder) {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.filters-container :deep(.form-control:focus) {
+  outline: none;
+  border-color: rgba(78, 159, 255, 0.75);
+  box-shadow: 0 0 0 3px rgba(78, 159, 255, 0.12);
+}
+
+.filters-container :deep(select.form-control) {
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  padding-right: 2.5rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.9) 50%),
+    linear-gradient(135deg, rgba(255,255,255,0.9) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 3px),
+    calc(100% - 12px) calc(50% - 3px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+.filters-container :deep(select.form-control option) {
+  background: #13263f;
+  color: #fff;
 }
 
 .thumbnail-image {
@@ -848,6 +958,19 @@ textarea.form-control {
 }
 
 @media (max-width: 768px) {
+  .filters-container {
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .search-panel-header {
+    flex-direction: column;
+  }
+
+  .filter-results {
+    text-align: left;
+  }
+
   .filters-grid {
     grid-template-columns: 1fr;
   }
@@ -855,14 +978,18 @@ textarea.form-control {
   .pagination-controls {
     font-size: 0.9em;
     flex-wrap: wrap;
+    padding: 10px;
   }
 
   .page-info {
     margin: 0 8px;
+    order: 10;
+    width: 100%;
+    text-align: center;
   }
 
   .pagination-input-field {
-    width: 100px;
+    width: 110px;
   }
 }
 </style>

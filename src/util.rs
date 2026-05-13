@@ -45,7 +45,10 @@ async fn session_response(
     match UserSession::from_jwt(token) {
         Ok(session) => match db.get_user_by_id(session.id).await {
             Some(user) => Ok(user),
-            None => Err(str_response(StatusCode::FORBIDDEN, "User not found")),
+            None => Err(str_response(
+                StatusCode::from_u16(498).unwrap(), // "Invalid Token"
+                "User not found"
+            )),
         },
         Err(e) => Err(str_response(StatusCode::UNAUTHORIZED, &e.to_string())),
     }
