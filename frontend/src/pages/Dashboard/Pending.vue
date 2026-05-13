@@ -16,7 +16,8 @@ const REJECT_PRESETS = [
   "Low quality",
   "No gameplay in thumbnail",
   "Too close to start",
-  "Texture Pack"
+  "Texture Pack",
+  "High Quality mobile texture bug"
 ];
 
 const loading = ref(true);
@@ -296,22 +297,22 @@ function secToMinSec(seconds: number) {
         <div class="card info-side">
           <span class="card-subtitle">Level Statistics</span>
           <p class="card-text">
-            <p v-if="selectedItem!.note_data?.downloads" class="card-stat-row">
+            <p v-if="isFinite(selectedItem!.note_data?.downloads || NaN)" class="card-stat-row">
               <span class="stat-row-label">
                 <img src="/icons/download.svg" alt="Download Icon" />
                 Downloads
               </span>
               <span class="stat-row-value">
-                {{ selectedItem!.note_data.downloads.toLocaleString() }}<br/>
+                {{ selectedItem!.note_data!.downloads!.toLocaleString() }}<br/>
               </span>
             </p>
-            <p v-if="selectedItem!.note_data?.likes" class="card-stat-row">
+            <p v-if="isFinite(selectedItem!.note_data?.likes || NaN)" class="card-stat-row">
               <span class="stat-row-label">
                 <img src="/icons/like.svg" alt="Like Icon" />
                 Likes
               </span>
               <span class="stat-row-value">
-                {{ selectedItem!.note_data.likes.toLocaleString() }}<br/>
+                {{ selectedItem!.note_data!.likes!.toLocaleString() }}<br/>
               </span>
             </p>
             <p v-if="selectedItem!.note_data?.length" class="card-stat-row">

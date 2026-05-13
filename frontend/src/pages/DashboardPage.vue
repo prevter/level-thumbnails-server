@@ -6,6 +6,7 @@ import Settings from "./Dashboard/Settings.vue";
 import Pending from "./Dashboard/Pending.vue";
 import Thumbnails from "./Dashboard/Thumbnails.vue";
 import Dashboard from "./Dashboard/Dashboard.vue";
+import Users from "./Dashboard/Users.vue";
 
 const user = ref(SessionManager.getUser());
 
@@ -31,6 +32,7 @@ const PAGES = [
   {name: "Dashboard", path: "", icon: '/icons/dashboard.svg'},
   {name: "My Thumbnails", path: "thumbnails", icon: '/icons/photos.svg'},
   {name: "Pending", path: "pending", icon: '/icons/pending.svg', requires: hasPendingPerms},
+  {name: "Users", path: "users", icon: '/icons/users.svg', requires: hasPendingPerms},
   {name: "Settings", path: "settings", icon: '/icons/settings.svg'},
 ]
 
@@ -91,6 +93,7 @@ const PAGES = [
       <Thumbnails v-if="currentPage === 'thumbnails'" class="page-transition"/>
       <Pending v-if="currentPage === 'pending' && hasPendingPerms()" class="page-transition"/>
       <Settings v-if="currentPage === 'settings'" class="page-transition"/>
+      <Users v-if="currentPage === 'users' && hasPendingPerms()" class="page-transition"/>
     </div>
   </main>
 </template>
