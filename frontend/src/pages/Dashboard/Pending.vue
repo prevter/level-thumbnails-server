@@ -15,7 +15,8 @@ const REJECT_PRESETS = [
   "Visible overlays",
   "Low quality",
   "No gameplay in thumbnail",
-  "Too close to start"
+  "Too close to start",
+  "Texture Pack"
 ];
 
 const loading = ref(true);

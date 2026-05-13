@@ -571,14 +571,9 @@ pub async fn get_pending_image(
 }
 
 pub async fn get_level_lock(
-    headers: HeaderMap,
     State(db): State<database::AppState>,
     Path(id): Path<i64>,
 ) -> Response {
-    if let Err(response) = authenticate_moderator(&headers, &db).await {
-        return response;
-    }
-
     match db.get_level_lock(id).await {
         Ok(lock) => util::response(
             StatusCode::OK,
