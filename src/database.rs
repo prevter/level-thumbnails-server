@@ -365,17 +365,6 @@ impl AppState {
         Ok(())
     }
 
-    pub async fn is_level_locked(&self, level_id: i64) -> Result<bool, sqlx::Error> {
-        let exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM level_locks WHERE level_id = $1)",
-        )
-        .bind(level_id)
-        .fetch_one(&*self.pool)
-        .await?;
-
-        Ok(exists)
-    }
-
     pub async fn get_level_lock(&self, level_id: i64) -> Result<Option<LevelLock>, sqlx::Error> {
         sqlx::query_as::<_, LevelLock>(
             "SELECT
@@ -441,17 +430,6 @@ impl AppState {
 
         Ok(result.rows_affected() > 0)
     }
-
-    // pub async fn get_pending_uploads(&self) -> Result<Vec<PendingUpload>, sqlx::Error> {
-    //     sqlx::query_as::<_, PendingUpload>(
-    //         "SELECT uploads.id, user_id, username, level_id, accepted, upload_time FROM uploads
-    //          LEFT JOIN users ON users.id = user_id
-    //          WHERE accepted = FALSE AND accepted_time IS NULL
-    //          ORDER BY upload_time",
-    //     )
-    //     .fetch_all(&*self.pool)
-    //     .await
-    // }
 
     fn apply_pending_filters<'a>(
         builder: &mut QueryBuilder<'a, Postgres>,
@@ -537,21 +515,6 @@ impl AppState {
             Ok(PendingUploadsPage { uploads, total })
         }
     }
-
-    // pub async fn get_pending_uploads_for_level(
-    //     &self,
-    //     level_id: i64,
-    // ) -> Result<Vec<PendingUpload>, sqlx::Error> {
-    //     sqlx::query_as::<_, PendingUpload>(
-    //         "SELECT uploads.id, user_id, username, accepted, upload_time FROM uploads
-    //               LEFT JOIN users ON users.id = user_id
-    //               WHERE accepted = FALSE AND accepted_time IS NULL AND level_id = $1
-    //               ORDER BY upload_time",
-    //     )
-    //     .bind(level_id)
-    //     .fetch_all(&*self.pool)
-    //     .await
-    // }
 
     pub async fn get_pending_uploads_for_user(
         &self,

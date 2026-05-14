@@ -171,7 +171,7 @@ pub async fn upload(
         Err(response) => return response,
     };
 
-    let ua = match util::parse_useragent(&headers) {
+    match util::parse_useragent(&headers) {
         Some(ua) => {
             if db.settings.read().await.min_supported_client.is_newer_than(&ua.version) {
                 return util::str_response(
@@ -182,7 +182,6 @@ pub async fn upload(
                     )
                 );
             }
-            ua
         },
         None => return util::str_response(
             StatusCode::UPGRADE_REQUIRED,
