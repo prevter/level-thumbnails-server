@@ -15,11 +15,32 @@ function renderChart() {
   if (!canvasRef.value) return;
 
   chart?.destroy();
-  chart = new Chart(canvasRef.value, props.config);
+  chart = new Chart(canvasRef.value, {
+    ...props.config,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      ...props.config.options,
+    },
+  });
 }
 
 onMounted(renderChart);
-watch(() => props.config, renderChart, {deep: true});
+
+watch(
+  () => props.config,
+  () => {
+    if (chart) {
+      chart.data = props.config.data;
+      chart.options = { responsive: true, maintainAspectRatio: false, ...props.config.options };
+      chart.update();
+    } else {
+      renderChart();
+    }
+  },
+  { deep: true }
+);
+
 onBeforeUnmount(() => chart?.destroy());
 </script>
 
@@ -39,9 +60,5 @@ onBeforeUnmount(() => chart?.destroy());
 
 canvas {
   display: block;
-  width: 100% !important;
-  height: 100% !important;
-  max-height: 100%;
 }
 </style>
-
