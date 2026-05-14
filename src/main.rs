@@ -92,7 +92,7 @@ async fn main() {
         // /admin
         .route("/admin/settings", get(admin::get_settings))
         .route("/admin/settings", post(admin::update_settings))
-        // .route("/admin/users", get(routes::admin::get_users))
+        .route("/admin/users", get(admin::get_users))
         // .route("/admin/user/:id", get(routes::admin::get_user_by_id))
         // .route("/admin/user/:id", patch(routes::admin::update_user))
         // .route("/admin/ban/:id", post(routes::admin::ban_user))

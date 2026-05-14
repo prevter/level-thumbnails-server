@@ -1,10 +1,13 @@
 use crate::{database, util};
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Response;
 use serde::Deserialize;
 use crate::util::VersionInfo;
+
+const DEFAULT_ADMIN_USER_PAGE_SIZE: u32 = 50;
+const MAX_ADMIN_USER_PAGE_SIZE: u32 = 100;
 
 pub async fn admin_middleware(
     headers: &HeaderMap,
@@ -16,6 +19,22 @@ pub async fn admin_middleware(
                 Ok(user)
             } else {
                 Err(util::str_response(StatusCode::FORBIDDEN, "Admin privileges required"))
+            }
+        }
+        Err(resp) => Err(resp),
+    }
+}
+
+pub async fn mod_middleware(
+    headers: &HeaderMap,
+    db: &database::AppState,
+) -> Result<database::User, Response> {
+    match util::auth_middleware(headers, db).await {
+        Ok(user) => {
+            if user.role == database::Role::Admin || user.role == database::Role::Moderator {
+                Ok(user)
+            } else {
+                Err(util::str_response(StatusCode::FORBIDDEN, "Moderator or Admin privileges required"))
             }
         }
         Err(resp) => Err(resp),
@@ -64,6 +83,78 @@ pub async fn update_settings(
                 Err(e) => util::str_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     &format!("Failed to save settings: {}", e),
+                ),
+            }
+        }
+        Err(resp) => resp,
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct AdminUsersQueryParams {
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
+    pub id: Option<i64>,
+    pub username: Option<String>,
+    pub account_id: Option<i64>,
+    pub discord_id: Option<i64>,
+    pub role: Option<database::Role>,
+    pub total_uploads: Option<i64>,
+    pub banned: Option<bool>,
+    pub sort_by: Option<database::UserListSortBy>,
+    pub sort_dir: Option<database::SortDirection>,
+}
+
+pub async fn get_users(
+    headers: HeaderMap,
+    Query(params): Query<AdminUsersQueryParams>,
+    State(db): State<database::AppState>,
+) -> Response {
+    match mod_middleware(&headers, &db).await {
+        Ok(_) => {
+            let page = params.page.unwrap_or(1).max(1);
+            let per_page = params
+                .per_page
+                .unwrap_or(DEFAULT_ADMIN_USER_PAGE_SIZE)
+                .clamp(1, MAX_ADMIN_USER_PAGE_SIZE);
+
+            let options = database::AdminUserQueryOptions {
+                page,
+                per_page,
+                id: params.id,
+                username: params.username,
+                account_id: params.account_id,
+                discord_id: params.discord_id,
+                role: params.role,
+                total_uploads: params.total_uploads,
+                banned: params.banned,
+                sort_by: params.sort_by.unwrap_or(database::UserListSortBy::Id),
+                sort_dir: params.sort_dir.unwrap_or(database::SortDirection::Asc),
+            };
+
+            match db.get_admin_users_paginated(options).await {
+                Ok(page_data) => {
+                    let total_pages = if page_data.total == 0 {
+                        0
+                    } else {
+                        (page_data.total + per_page as i64 - 1) / per_page as i64
+                    };
+
+                    util::response(
+                        StatusCode::OK,
+                        serde_json::json!({
+                            "status": StatusCode::OK.as_u16(),
+                            "users": page_data.users,
+                            "page": page,
+                            "per_page": per_page,
+                            "total": page_data.total,
+                            "total_pages": total_pages,
+                        }),
+                    )
+                }
+                Err(e) => util::str_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    &format!("Failed to fetch users: {}", e),
                 ),
             }
         }

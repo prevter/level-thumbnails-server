@@ -87,3 +87,25 @@ export interface PendingResponse {
   per_page: number;
   total: number;
 }
+
+export interface UserRow {
+  id: number;
+  username: string;
+  account_id: number;
+  discord_id: string | null;
+  role: 'user' | 'verified' | 'moderator' | 'admin';
+  total_uploads: number;
+  accepted: number;
+  pending: number;
+  rejected: number;
+  active_thumbnails: number;
+  banned: boolean;
+}
+
+export interface UserListResponse {
+  users: UserRow[];
+  page: number;
+  per_page: number;
+  total: number;
+  total_pages: number;
+}

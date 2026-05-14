@@ -150,6 +150,66 @@ pub struct UserStats {
     pub active_thumbnail_count: i64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UserListSortBy {
+    Id,
+    Username,
+    AccountId,
+    DiscordId,
+    Role,
+    TotalUploads,
+    Accepted,
+    Pending,
+    Rejected,
+    ActiveThumbnails,
+    Banned,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SortDirection {
+    Asc,
+    Desc,
+}
+
+#[derive(Debug, Clone)]
+pub struct AdminUserQueryOptions {
+    pub page: u32,
+    pub per_page: u32,
+    pub id: Option<i64>,
+    pub username: Option<String>,
+    pub account_id: Option<i64>,
+    pub discord_id: Option<i64>,
+    pub role: Option<Role>,
+    pub total_uploads: Option<i64>,
+    pub banned: Option<bool>,
+    pub sort_by: UserListSortBy,
+    pub sort_dir: SortDirection,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize)]
+pub struct AdminUserRow {
+    pub id: i64,
+    pub username: String,
+    pub account_id: i64,
+    #[serde(serialize_with = "serialize_discord_snowflake")]
+    pub discord_id: Option<i64>,
+    pub role: Role,
+    pub total_uploads: i64,
+    pub accepted: i64,
+    pub pending: i64,
+    pub rejected: i64,
+    pub active_thumbnails: i64,
+    pub banned: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct AdminUsersPage {
+    pub users: Vec<AdminUserRow>,
+    pub total: i64,
+}
+
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct StatsSnapshot {
     pub id: i64,
@@ -456,6 +516,75 @@ impl AppState {
         Path::new(&image_path).exists()
     }
 
+    fn apply_user_filters<'a>(
+        builder: &mut QueryBuilder<'a, Postgres>,
+        options: &AdminUserQueryOptions,
+    ) {
+        if let Some(id) = options.id {
+            builder.push(" AND id = ").push_bind(id);
+        }
+
+        if let Some(ref username) = options.username {
+            let username = username.trim();
+            if !username.is_empty() {
+                builder
+                    .push(" AND LOWER(username) LIKE LOWER(")
+                    .push_bind(format!("%{}%", username))
+                    .push(")");
+            }
+        }
+
+        if let Some(account_id) = options.account_id {
+            builder.push(" AND account_id = ").push_bind(account_id);
+        }
+
+        if let Some(discord_id) = options.discord_id {
+            builder.push(" AND discord_id = ").push_bind(discord_id);
+        }
+
+        if let Some(role) = options.role {
+            builder.push(" AND role = ").push_bind(role);
+        }
+
+        if let Some(total_uploads) = options.total_uploads {
+            builder
+                .push(" AND total_uploads = ")
+                .push_bind(total_uploads);
+        }
+
+        if let Some(banned) = options.banned {
+            builder.push(" AND banned = ").push_bind(banned);
+        }
+    }
+
+    fn apply_user_sort(
+        builder: &mut QueryBuilder<'_, Postgres>,
+        sort_by: UserListSortBy,
+        sort_direction: SortDirection,
+    ) {
+        let direction = match sort_direction {
+            SortDirection::Asc => "ASC",
+            SortDirection::Desc => "DESC",
+        };
+
+        builder.push(" ORDER BY ");
+        match sort_by {
+            UserListSortBy::Id => builder.push("id ").push(direction),
+            UserListSortBy::Username => builder.push("LOWER(username) ").push(direction),
+            UserListSortBy::AccountId => builder.push("account_id ").push(direction),
+            UserListSortBy::DiscordId => builder.push("discord_id ").push(direction).push(" NULLS LAST"),
+            UserListSortBy::Role => builder
+                .push("CASE role WHEN 'user' THEN 0 WHEN 'verified' THEN 1 WHEN 'moderator' THEN 2 WHEN 'admin' THEN 3 END ")
+                .push(direction),
+            UserListSortBy::TotalUploads => builder.push("total_uploads ").push(direction),
+            UserListSortBy::Accepted => builder.push("accepted ").push(direction),
+            UserListSortBy::Pending => builder.push("pending ").push(direction),
+            UserListSortBy::Rejected => builder.push("rejected ").push(direction),
+            UserListSortBy::ActiveThumbnails => builder.push("active_thumbnails ").push(direction),
+            UserListSortBy::Banned => builder.push("banned ").push(direction),
+        };
+    }
+
     pub async fn get_pending_uploads_paginated(
         &self,
         options: PendingQueryOptions,
@@ -540,6 +669,86 @@ impl AppState {
         .bind(id)
         .fetch_one(&*self.pool)
         .await
+    }
+
+    pub async fn get_admin_users_paginated(
+        &self,
+        options: AdminUserQueryOptions,
+    ) -> Result<AdminUsersPage, sqlx::Error> {
+        let user_stats_cte = String::from(
+            r#"WITH upload_counts AS (
+                SELECT
+                    user_id,
+                    COUNT(*)::BIGINT AS total_uploads,
+                    COUNT(*) FILTER (WHERE accepted = TRUE)::BIGINT AS accepted,
+                    COUNT(*) FILTER (WHERE accepted = FALSE AND accepted_time IS NULL)::BIGINT AS pending,
+                    COUNT(*) FILTER (WHERE accepted = FALSE AND accepted_time IS NOT NULL)::BIGINT AS rejected
+                FROM uploads
+                GROUP BY user_id
+            ), latest_accepted_uploads AS (
+                SELECT DISTINCT ON (level_id)
+                    level_id,
+                    user_id
+                FROM uploads
+                WHERE accepted = TRUE
+                ORDER BY level_id, upload_time DESC, id DESC
+            ), active_counts AS (
+                SELECT
+                    user_id,
+                    COUNT(*)::BIGINT AS active_thumbnails
+                FROM latest_accepted_uploads
+                GROUP BY user_id
+            ), user_stats AS (
+                SELECT
+                    users.id,
+                    users.username,
+                    users.account_id,
+                    users.discord_id,
+                    users.role,
+                    COALESCE(upload_counts.total_uploads, 0) AS total_uploads,
+                    COALESCE(upload_counts.accepted, 0) AS accepted,
+                    COALESCE(upload_counts.pending, 0) AS pending,
+                    COALESCE(upload_counts.rejected, 0) AS rejected,
+                    COALESCE(active_counts.active_thumbnails, 0) AS active_thumbnails,
+                    EXISTS (SELECT 1 FROM bans WHERE bans.user_id = users.id) AS banned
+                FROM users
+                LEFT JOIN upload_counts ON upload_counts.user_id = users.id
+                LEFT JOIN active_counts ON active_counts.user_id = users.id
+            )"#,
+        );
+
+        let data_query = format!(
+            "{} SELECT id, username, account_id, discord_id, role, total_uploads, accepted, pending, rejected, active_thumbnails, banned FROM user_stats WHERE TRUE",
+            user_stats_cte
+        );
+        let count_query = format!("{} SELECT COUNT(*) FROM user_stats WHERE TRUE", user_stats_cte);
+
+        let mut data_builder = QueryBuilder::new(data_query);
+        Self::apply_user_filters(&mut data_builder, &options);
+        Self::apply_user_sort(&mut data_builder, options.sort_by, options.sort_dir);
+
+        let per_page = options.per_page as i64;
+        let offset = ((options.page.saturating_sub(1)) as i64) * per_page;
+
+        data_builder
+            .push(" LIMIT ")
+            .push_bind(per_page)
+            .push(" OFFSET ")
+            .push_bind(offset);
+
+        let users = data_builder
+            .build_query_as::<AdminUserRow>()
+            .fetch_all(&*self.pool)
+            .await?;
+
+        let mut count_builder = QueryBuilder::new(count_query);
+        Self::apply_user_filters(&mut count_builder, &options);
+
+        let total: i64 = count_builder.build_query_scalar()
+            .fetch_one(&*self.pool)
+            .await?;
+
+        Ok(AdminUsersPage { users, total })
     }
 
     pub async fn accept_upload(
