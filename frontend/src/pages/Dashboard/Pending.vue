@@ -241,6 +241,19 @@ function secToMinSec(seconds: number) {
   return `${mins}:${secs.padStart(5, '0')}`;
 }
 
+function roleIcon(role: string) {
+  switch (role) {
+    case 'admin':
+      return '/icons/admin.svg';
+    case 'moderator':
+      return '/icons/moderator.svg';
+    case 'verified':
+      return '/icons/verified-user.svg';
+    default:
+      return '/icons/user.svg';
+  }
+}
+
 </script>
 
 <template>
@@ -258,8 +271,7 @@ function secToMinSec(seconds: number) {
         <div class="card">
           <span class="card-subtitle">Submitted By</span>
           <p class="card-text">
-            <img :src="selectedItem!.user_role == 'user' ? '/icons/user.svg' : '/icons/verified-user.svg'"
-              :alt="selectedItem!.user_role == 'user' ? 'User' : 'Verified User'" class="user-icon" />
+            <img :src="roleIcon(selectedItem!.user_role)" :alt="selectedItem!.user_role" class="user-icon" />
             <span :title="`User ID: ${selectedItem!.user_id}`">{{ selectedItem!.username }}</span>
             <img src="/icons/verified.svg" alt="Creator Badge" style="margin-left: 4px;" v-if="selectedItem!.account_id && selectedItem!.note_data?.creator_id === selectedItem!.account_id" />
             <span v-if="selectedItem!.replacement" class="subtitle">&bullet; Replacement</span>
@@ -547,7 +559,7 @@ function secToMinSec(seconds: number) {
             {{ item.note_data?.level_name || 'Unknown Level' }} (ID: {{ item.level_id }})<br/>
             Submitted by {{ item.username }}<br/>
             <span v-if="item.replacement" class="replacement-badge">Replacement</span>
-            <span v-if="item.note_data?.creator_name == item.username" class="creator-badge">Level Creator</span>
+            <span v-if="item.note_data?.creator_id == item.account_id" class="creator-badge">Level Creator</span>
           </div>
         </div>
       </div>
