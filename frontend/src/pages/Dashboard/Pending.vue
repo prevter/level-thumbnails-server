@@ -8,6 +8,7 @@ import { fetchJson, parseSubmissionNote } from "../../lib/utils";
 
 const REJECT_PRESETS = [
   "Original was better",
+  "Original was made by the creator",
   "Screenshot bug",
   "Dead/About to die",
   "Noclip",
