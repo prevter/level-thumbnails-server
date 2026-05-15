@@ -79,7 +79,7 @@ function trySignIn() {
           </p>
           <p>
             <Button @click="trySignIn()" isDark>
-              Sign In
+              {{ (SessionManager.isAuthenticated() ? "Open Dashboard" : "Sign In")}}
             </Button>
           </p>
         </div>
