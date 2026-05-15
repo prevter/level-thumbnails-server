@@ -17,7 +17,8 @@ const REJECT_PRESETS = [
   "No gameplay in thumbnail",
   "Too close to start",
   "Texture Pack",
-  "High Quality mobile texture bug"
+  "High Quality mobile texture bug",
+  "Title Card"
 ];
 
 const loading = ref(true);
