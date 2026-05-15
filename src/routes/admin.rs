@@ -1,9 +1,10 @@
-use crate::{database, util};
+use crate::{cache_controller, database, util};
 use axum::Json;
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Response;
 use serde::Deserialize;
+use crate::routes::thumbnail;
 use crate::util::VersionInfo;
 
 const DEFAULT_ADMIN_USER_PAGE_SIZE: u32 = 50;
@@ -155,6 +156,34 @@ pub async fn get_users(
                 Err(e) => util::str_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     &format!("Failed to fetch users: {}", e),
+                ),
+            }
+        }
+        Err(resp) => resp,
+    }
+}
+
+pub async fn delete_thumbnail(
+    headers: HeaderMap,
+    State(db): State<database::AppState>,
+    Path(id): Path<i64>,
+) -> Response {
+    match mod_middleware(&headers, &db).await {
+        Ok(_) => {
+            match db.delete_thumbnail_by_id(id).await {
+                Ok(deleted) => {
+                    if deleted {
+                        thumbnail::delete_thumbnail(id).await;
+                        thumbnail::purge_resize_cache(id).await;
+                        cache_controller::purge(id);
+                        util::str_response(StatusCode::OK, "Thumbnail deleted successfully")
+                    } else {
+                        util::str_response(StatusCode::NOT_FOUND, "Thumbnail not found")
+                    }
+                }
+                Err(e) => util::str_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    &format!("Failed to delete thumbnail: {}", e),
                 ),
             }
         }

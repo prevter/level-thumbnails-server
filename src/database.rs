@@ -275,7 +275,7 @@ impl AppState {
             "SELECT users.account_id, users.username
                  FROM uploads
                  JOIN users ON uploads.user_id = users.id
-                 WHERE uploads.level_id = $1 AND accepted = TRUE
+                 WHERE uploads.level_id = $1 AND accepted = TRUE AND uploads.deleted_at IS NULL
                  ORDER BY upload_time DESC LIMIT 1",
         )
         .bind(id)
@@ -293,7 +293,7 @@ impl AppState {
                     uploads.upload_time,
                     (
                         SELECT MIN(upload_time) FROM uploads u2
-                        WHERE u2.level_id = uploads.level_id AND u2.accepted = TRUE
+                        WHERE u2.level_id = uploads.level_id AND u2.accepted = TRUE AND u2.deleted_at IS NULL
                     ) AS first_upload_time,
                     uploads.accepted_time,
                     accepted_by.account_id AS accepted_by,
@@ -301,7 +301,7 @@ impl AppState {
                  FROM uploads
                  JOIN users ON uploads.user_id = users.id
                  LEFT JOIN users AS accepted_by ON uploads.accepted_by = accepted_by.id
-                 WHERE uploads.level_id = $1 AND accepted = TRUE
+                 WHERE uploads.level_id = $1 AND accepted = TRUE AND uploads.deleted_at IS NULL
                  ORDER BY upload_time DESC LIMIT 1",
         )
         .bind(id)
@@ -487,6 +487,18 @@ impl AppState {
             .bind(level_id)
             .execute(&*self.pool)
             .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn delete_thumbnail_by_id(&self, level_id: i64) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            "UPDATE uploads SET deleted_at = NOW()
+             WHERE level_id = $1 AND accepted = TRUE AND deleted_at IS NULL",
+        )
+        .bind(level_id)
+        .execute(&*self.pool)
+        .await?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -690,7 +702,7 @@ impl AppState {
                     level_id,
                     user_id
                 FROM uploads
-                WHERE accepted = TRUE
+                WHERE accepted = TRUE AND deleted_at IS NULL
                 ORDER BY level_id, upload_time DESC, id DESC
             ), active_counts AS (
                 SELECT
@@ -773,32 +785,34 @@ impl AppState {
     pub async fn get_user_stats(&self, id: i64) -> Option<UserStats> {
         sqlx::query_as::<_, UserStats>(
              "SELECT
-                 users.id, users.account_id,
-                 users.username, users.role,
-                 COUNT(uploads.id) AS upload_count,
-                 COUNT(DISTINCT uploads.level_id) AS level_count,
-                 COUNT(uploads.id) FILTER (WHERE uploads.accepted = TRUE) AS accepted_upload_count,
-                 COUNT(uploads.id) FILTER (WHERE uploads.accepted = FALSE AND uploads.accepted_time IS NULL) AS pending_upload_count,
-                 COUNT(DISTINCT uploads.level_id) FILTER (WHERE uploads.accepted = TRUE) AS accepted_level_count,
-                 (
-                   SELECT COUNT(*)
-                   FROM (
-                     SELECT u.level_id
-                     FROM uploads u
-                     WHERE u.accepted = TRUE
-                     AND u.user_id = users.id
-                     AND u.upload_time = (
-                       SELECT MAX(u2.upload_time)
-                       FROM uploads u2
-                       WHERE u2.level_id = u.level_id
-                         AND u2.accepted = TRUE
-                     )
-                   ) active_levels
-                 ) AS active_thumbnail_count
-               FROM users
-               LEFT JOIN uploads ON users.id = uploads.user_id
-               WHERE users.id = $1
-               GROUP BY users.id, users.account_id, users.username, users.role",
+                  users.id, users.account_id,
+                  users.username, users.role,
+                  COUNT(uploads.id) AS upload_count,
+                  COUNT(DISTINCT uploads.level_id) AS level_count,
+                  COUNT(uploads.id) FILTER (WHERE uploads.accepted = TRUE) AS accepted_upload_count,
+                  COUNT(uploads.id) FILTER (WHERE uploads.accepted = FALSE AND uploads.accepted_time IS NULL) AS pending_upload_count,
+                  COUNT(DISTINCT uploads.level_id) FILTER (WHERE uploads.accepted = TRUE) AS accepted_level_count,
+                  (
+                    SELECT COUNT(*)
+                    FROM (
+                      SELECT u.level_id
+                      FROM uploads u
+                      WHERE u.accepted = TRUE
+                      AND u.deleted_at IS NULL
+                      AND u.user_id = users.id
+                      AND u.upload_time = (
+                        SELECT MAX(u2.upload_time)
+                        FROM uploads u2
+                        WHERE u2.level_id = u.level_id
+                          AND u2.accepted = TRUE
+                          AND u2.deleted_at IS NULL
+                      )
+                    ) active_levels
+                  ) AS active_thumbnail_count
+                FROM users
+                LEFT JOIN uploads ON users.id = uploads.user_id
+                WHERE users.id = $1
+                GROUP BY users.id, users.account_id, users.username, users.role",
          )
          .bind(id)
          .fetch_optional(&*self.pool)
@@ -829,7 +843,7 @@ impl AppState {
                AND upload_time >= $2
                AND upload_time < $3
              GROUP BY 1
-             ORDER BY 1 ASC",
+             ORDER BY 1",
         )
         .bind(id)
         .bind(start_month.and_hms_opt(0, 0, 0).expect("invalid start month time"))
@@ -961,7 +975,7 @@ impl AppState {
                  ORDER BY captured_at DESC, id DESC
                  LIMIT $1
              ) recent
-             ORDER BY captured_at ASC, id ASC",
+             ORDER BY captured_at, id",
         )
         .bind(limit)
         .fetch_all(&*self.pool)

@@ -44,6 +44,15 @@ fn cache_path(id: u64, res: Res) -> PathBuf {
     PathBuf::from(format!("{}/{}_{}.webp", CACHE_DIR, id, res))
 }
 
+pub async fn delete_thumbnail(id: i64) {
+    let image_path = PathBuf::from(format!("thumbnails/{}.webp", id));
+    if let Err(e) = tokio::fs::remove_file(&image_path).await {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            warn!("Failed to remove thumbnail {:?}: {}", image_path, e);
+        }
+    }
+}
+
 pub async fn purge_resize_cache(id: i64) {
     for res in [Res::Small, Res::Medium] {
         let path = cache_path(id as u64, res);
