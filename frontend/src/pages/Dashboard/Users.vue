@@ -81,6 +81,13 @@ function canManageRoles(): boolean {
   return currentUserRole === 'moderator' || currentUserRole === 'admin' || currentUserRole === 'owner';
 }
 
+function canBanUser(user: UserRow): boolean {
+  if (!canManageRoles()) return false;
+  const targetHierarchy = ROLE_HIERARCHY[user.role];
+  const myHierarchy = ROLE_HIERARCHY[currentUserRole];
+  return targetHierarchy < myHierarchy || currentUserRole === 'owner';
+}
+
 function getAvailableRolesForUser(user: UserRow): UserRole[] {
   if (!canManageRoles()) return [];
 
@@ -592,7 +599,7 @@ async function unbanUser(userId: number) {
 
               <td class="actions-th">
                 <button
-                  v-if="canManageRoles()"
+                  v-if="canBanUser(u)"
                   class="btn btn-sm"
                   :class="u.banned ? 'btn-secondary' : 'btn-danger'"
                   :disabled="banLoading && banModalUserId === u.id"
