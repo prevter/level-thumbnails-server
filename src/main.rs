@@ -75,10 +75,13 @@ async fn main() {
         // /user
         .route("/user/me", get(user::get_me))
         .route("/user/me/history", get(user::get_me_history))
+        .route("/user/me/uploads/summary", get(user::get_my_upload_summary))
+        .route("/user/me/uploads/active", get(user::get_my_active_uploads))
+        .route("/user/me/uploads/pending", get(user::get_my_pending_uploads))
+        .route("/user/me/uploads/rejected", get(user::get_my_rejected_uploads))
         // .route("/user/me", delete(user::delete_me))
         .route("/user/{id}", get(user::get_user_by_id))
         .route("/user/{id}/history", get(user::get_user_history))
-        // .route("/user/me/uploads", get(routes::user::get_my_uploads))
         // .route("/user/{id}/uploads", get(routes::user::get_user_uploads))
         // /upload
         .route("/upload/{id}", post(upload::upload))

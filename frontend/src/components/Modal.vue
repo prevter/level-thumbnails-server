@@ -12,6 +12,7 @@ interface Props {
   open: boolean;
   title: string;
   buttons?: ModalButton[];
+  dialogClass?: string;
 }
 
 interface Emits {
@@ -21,6 +22,7 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   buttons: () => [],
+  dialogClass: '',
 });
 
 const emit = defineEmits<Emits>();
@@ -50,7 +52,7 @@ function getButtonClass(btn: ModalButton & { variant: 'primary' | 'secondary' | 
 <template>
   <Teleport to="body" v-if="open">
     <div class="modal-overlay" @click="$emit('close')">
-      <div class="modal-dialog" @click.stop>
+      <div class="modal-dialog" :class="props.dialogClass" @click.stop>
         <div class="modal-header">
           <h2>{{ title }}</h2>
           <button type="button" class="modal-close" @click="$emit('close')">✕</button>
@@ -101,6 +103,15 @@ function getButtonClass(btn: ModalButton & { variant: 'primary' | 'secondary' | 
   overflow: hidden;
 }
 
+.modal-dialog.modal-dialog--fullscreen {
+  max-width: none;
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -142,6 +153,11 @@ function getButtonClass(btn: ModalButton & { variant: 'primary' | 'secondary' | 
   gap: 14px;
   max-height: 60vh;
   overflow-y: auto;
+}
+
+.modal-dialog.modal-dialog--fullscreen .modal-body {
+  flex: 1;
+  max-height: none;
 }
 
 .modal-body::-webkit-scrollbar {

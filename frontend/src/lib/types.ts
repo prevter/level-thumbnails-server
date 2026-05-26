@@ -88,6 +88,30 @@ export interface PendingResponse {
   total: number;
 }
 
+export interface MyThumbnailActiveItem {
+  id: number;
+  level_id: number;
+  upload_time: string;
+  accepted_time: string | null;
+  submission_note: string | null;
+}
+
+export interface MyThumbnailRejectedItem {
+  id: number;
+  level_id: number;
+  upload_time: string;
+  accepted_time: string | null;
+  submission_note: string | null;
+  reason: string | null;
+  accepted_by_username: string | null;
+}
+
+export interface MyUploadsSummaryResponse {
+  active: number;
+  pending: number;
+  rejected: number;
+}
+
 export interface UserRow {
   id: number;
   username: string;

@@ -14,6 +14,8 @@ const PENDING_UPLOAD_SELECT: &str = "SELECT uploads.id, user_id, users.username 
      LEFT JOIN users ON users.id = user_id \
      WHERE accepted = FALSE AND accepted_time IS NULL";
 
+const MAX_MY_UPLOADS_PAGE_SIZE: u32 = 100;
+
 const USER_STATS_CTE: &str = r#"WITH upload_counts AS (
     SELECT
         user_id,
@@ -269,6 +271,26 @@ pub struct PendingUpload {
     pub replacement: bool,
 }
 
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct ActiveUpload {
+    pub id: i64,
+    pub level_id: i64,
+    pub upload_time: NaiveDateTime,
+    pub accepted_time: Option<NaiveDateTime>,
+    pub submission_note: Option<String>,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct RejectedUpload {
+    pub id: i64,
+    pub level_id: i64,
+    pub upload_time: NaiveDateTime,
+    pub accepted_time: Option<NaiveDateTime>,
+    pub submission_note: Option<String>,
+    pub reason: Option<String>,
+    pub accepted_by_username: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct PendingQueryOptions {
     pub page: u32,
@@ -284,6 +306,25 @@ pub struct PendingQueryOptions {
 pub struct PendingUploadsPage {
     pub uploads: Vec<PendingUpload>,
     pub total: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ActiveUploadsPage {
+    pub uploads: Vec<ActiveUpload>,
+    pub total: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct RejectedUploadsPage {
+    pub uploads: Vec<RejectedUpload>,
+    pub total: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MyUploadsSummary {
+    pub active: i64,
+    pub pending: i64,
+    pub rejected: i64,
 }
 
 #[derive(FromRow, Serialize, Deserialize)]
@@ -895,6 +936,218 @@ impl AppState {
         .bind(user_id)
         .fetch_all(&*self.pool)
         .await
+    }
+
+    pub async fn get_user_active_uploads_paginated(
+        &self,
+        user_id: i64,
+        page: u32,
+        per_page: u32,
+        level_id_search: Option<String>,
+        _creator_search: Option<String>,
+    ) -> Result<ActiveUploadsPage, sqlx::Error> {
+        let per_page = per_page.min(MAX_MY_UPLOADS_PAGE_SIZE) as i64;
+        let page = page.max(1) as i64;
+        let offset = (page - 1) * per_page;
+        let level_id_search = level_id_search.and_then(|s| s.parse::<i64>().ok());
+
+        let uploads = sqlx::query_as::<_, ActiveUpload>(
+            "WITH active_uploads AS (
+                SELECT DISTINCT ON (uploads.level_id)
+                    uploads.id,
+                    uploads.user_id,
+                    uploads.level_id,
+                    uploads.upload_time,
+                    uploads.accepted_time,
+                    uploads.submission_note
+                FROM uploads
+                WHERE uploads.accepted = TRUE AND uploads.deleted_at IS NULL
+                ORDER BY uploads.level_id, uploads.upload_time DESC, uploads.id DESC
+            )
+            SELECT id, level_id, upload_time, accepted_time, submission_note
+            FROM active_uploads
+            WHERE user_id = $1 AND ($4::BIGINT IS NULL OR level_id = $4)
+            ORDER BY upload_time DESC, id DESC
+            LIMIT $2 OFFSET $3",
+        )
+        .bind(user_id)
+        .bind(per_page)
+        .bind(offset)
+        .bind(level_id_search)
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let total: i64 = sqlx::query_scalar(
+            "WITH active_uploads AS (
+                SELECT DISTINCT ON (uploads.level_id)
+                    uploads.user_id,
+                    uploads.level_id
+                FROM uploads
+                WHERE uploads.accepted = TRUE AND uploads.deleted_at IS NULL
+                ORDER BY uploads.level_id, uploads.upload_time DESC, uploads.id DESC
+            )
+            SELECT COUNT(*) FROM active_uploads WHERE user_id = $1 AND ($2::BIGINT IS NULL OR level_id = $2)",
+        )
+        .bind(user_id)
+        .bind(level_id_search)
+        .fetch_one(&*self.pool)
+        .await?;
+
+        Ok(ActiveUploadsPage { uploads, total })
+    }
+
+    pub async fn get_user_rejected_uploads_paginated(
+        &self,
+        user_id: i64,
+        page: u32,
+        per_page: u32,
+        level_id_search: Option<String>,
+        _creator_search: Option<String>,
+    ) -> Result<RejectedUploadsPage, sqlx::Error> {
+        let per_page = per_page.min(MAX_MY_UPLOADS_PAGE_SIZE) as i64;
+        let page = page.max(1) as i64;
+        let offset = (page - 1) * per_page;
+        let level_id_search = level_id_search.and_then(|s| s.parse::<i64>().ok());
+
+        let uploads = sqlx::query_as::<_, RejectedUpload>(
+            "SELECT
+                uploads.id,
+                uploads.level_id,
+                uploads.upload_time,
+                uploads.accepted_time,
+                uploads.submission_note,
+                uploads.reason,
+                accepted_by.username AS accepted_by_username
+            FROM uploads
+            LEFT JOIN users AS accepted_by ON accepted_by.id = uploads.accepted_by
+            WHERE uploads.user_id = $1
+              AND uploads.accepted = FALSE
+              AND uploads.accepted_time IS NOT NULL
+              AND uploads.deleted_at IS NULL
+              AND ($4::BIGINT IS NULL OR uploads.level_id = $4)
+            ORDER BY uploads.accepted_time DESC, uploads.id DESC
+            LIMIT $2 OFFSET $3",
+        )
+        .bind(user_id)
+        .bind(per_page)
+        .bind(offset)
+        .bind(level_id_search)
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let total: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)
+             FROM uploads
+             WHERE uploads.user_id = $1
+               AND uploads.accepted = FALSE
+               AND uploads.accepted_time IS NOT NULL
+               AND uploads.deleted_at IS NULL
+               AND ($2::BIGINT IS NULL OR uploads.level_id = $2)",
+        )
+        .bind(user_id)
+        .bind(level_id_search)
+        .fetch_one(&*self.pool)
+        .await?;
+
+        Ok(RejectedUploadsPage { uploads, total })
+    }
+
+    pub async fn get_my_upload_summary(
+        &self,
+        user_id: i64,
+        level_id_search: Option<String>,
+    ) -> Result<MyUploadsSummary, sqlx::Error> {
+        let level_id_search = level_id_search.and_then(|s| s.parse::<i64>().ok());
+
+        let active = if let Some(level_id) = level_id_search {
+            sqlx::query_scalar(
+                "WITH active_uploads AS (
+                    SELECT DISTINCT ON (uploads.level_id)
+                        uploads.user_id,
+                        uploads.level_id
+                    FROM uploads
+                    WHERE uploads.accepted = TRUE AND uploads.deleted_at IS NULL
+                    ORDER BY uploads.level_id, uploads.upload_time DESC, uploads.id DESC
+                )
+                SELECT COUNT(*) FROM active_uploads WHERE user_id = $1 AND level_id = $2",
+            )
+            .bind(user_id)
+            .bind(level_id)
+            .fetch_one(&*self.pool)
+            .await?
+        } else {
+            sqlx::query_scalar(
+                "WITH active_uploads AS (
+                    SELECT DISTINCT ON (uploads.level_id)
+                        uploads.user_id
+                    FROM uploads
+                    WHERE uploads.accepted = TRUE AND uploads.deleted_at IS NULL
+                    ORDER BY uploads.level_id, uploads.upload_time DESC, uploads.id DESC
+                )
+                SELECT COUNT(*) FROM active_uploads WHERE user_id = $1",
+            )
+            .bind(user_id)
+            .fetch_one(&*self.pool)
+            .await?
+        };
+
+        let pending = if let Some(level_id) = level_id_search {
+            sqlx::query_scalar(
+                "SELECT COUNT(*)
+                 FROM uploads
+                 WHERE uploads.user_id = $1
+                   AND uploads.accepted = FALSE
+                   AND uploads.accepted_time IS NULL
+                   AND uploads.deleted_at IS NULL
+                   AND uploads.level_id = $2",
+            )
+            .bind(user_id)
+            .bind(level_id)
+            .fetch_one(&*self.pool)
+            .await?
+        } else {
+            sqlx::query_scalar(
+                "SELECT COUNT(*)
+                 FROM uploads
+                 WHERE uploads.user_id = $1
+                   AND uploads.accepted = FALSE
+                   AND uploads.accepted_time IS NULL
+                   AND uploads.deleted_at IS NULL",
+            )
+            .bind(user_id)
+            .fetch_one(&*self.pool)
+            .await?
+        };
+
+        let rejected = if let Some(level_id) = level_id_search {
+            sqlx::query_scalar(
+                "SELECT COUNT(*)
+                 FROM uploads
+                 WHERE uploads.user_id = $1
+                   AND uploads.accepted = FALSE
+                   AND uploads.accepted_time IS NOT NULL
+                   AND uploads.deleted_at IS NULL
+                   AND uploads.level_id = $2",
+            )
+            .bind(user_id)
+            .bind(level_id)
+            .fetch_one(&*self.pool)
+            .await?
+        } else {
+            sqlx::query_scalar(
+                "SELECT COUNT(*)
+                 FROM uploads
+                 WHERE uploads.user_id = $1
+                   AND uploads.accepted = FALSE
+                   AND uploads.accepted_time IS NOT NULL
+                   AND uploads.deleted_at IS NULL",
+            )
+            .bind(user_id)
+            .fetch_one(&*self.pool)
+            .await?
+        };
+
+        Ok(MyUploadsSummary { active, pending, rejected })
     }
 
     pub async fn get_pending_upload(&self, id: i64) -> Result<PendingUpload, sqlx::Error> {
