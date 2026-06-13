@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {ref} from "vue";
-import SessionManager, {type User} from "../../managers/session.ts";
+import SessionManager from "../../managers/session.ts";
 import type { ServerSettings } from "../../lib/types";
 import { fetchJson } from "../../lib/utils.ts";
 import { alertModal, confirmModal } from "../../lib/modals";
